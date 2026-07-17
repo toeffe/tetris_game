@@ -50,6 +50,33 @@ body{
   color:var(--gold);
   text-shadow:0 2px 0 #5c3d00,0 0 28px rgba(201,162,39,.3);
 }
+.lang-bar{
+  position:fixed;
+  top:12px;
+  right:12px;
+  z-index:30;
+  display:flex;
+  gap:4px;
+  padding:4px;
+  background:rgba(26,21,16,.75);
+  border:1px solid var(--bronze);
+  border-radius:3px;
+}
+.lang-btn{
+  width:auto;
+  min-width:40px;
+  margin:0;
+  padding:6px 10px;
+  font-size:.7rem;
+  letter-spacing:.08em;
+  opacity:.65;
+  box-shadow:none;
+}
+.lang-btn.active{
+  opacity:1;
+  background:linear-gradient(180deg,var(--gold),#a8841a);
+  color:#1a1208;
+}
 .subtitle{
   margin:4px 0 20px;
   color:var(--muted);

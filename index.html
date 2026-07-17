@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="da">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,48 +7,53 @@
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
+  <div class="lang-bar" role="group" aria-label="Language">
+    <button type="button" id="btnLangDa" class="lang-btn" data-lang="da">DA</button>
+    <button type="button" id="btnLangEn" class="lang-btn" data-lang="en">EN</button>
+  </div>
+
   <h1 class="title">STONEFALL</h1>
-  <p class="subtitle">Tetris-kamp</p>
+  <p class="subtitle" data-i18n="subtitle">Tetris battle</p>
 
   <div id="menu" class="panel">
-    <label class="field-label" for="menuName">Dit navn</label>
-    <input id="menuName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" placeholder="Navn">
-    <button id="btnHost">Opret spil</button>
-    <button id="btnJoin" class="secondary">Tilslut spil</button>
-    <p class="hint">Op til 8 spillere.</p>
+    <label class="field-label" for="menuName" data-i18n="yourName">Your name</label>
+    <input id="menuName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" placeholder="Name">
+    <button id="btnHost" data-i18n="hostGame">Host game</button>
+    <button id="btnJoin" class="secondary" data-i18n="joinGame">Join game</button>
+    <p class="hint" data-i18n="menuHint">Up to 8 players.</p>
   </div>
 
   <div id="netPanel" class="panel" hidden>
     <p id="netLabel" class="hint"></p>
     <div id="roomCode" class="room-code" hidden>·····</div>
-    <button id="btnCopy" type="button" hidden>Kopiér kode</button>
-    <input id="netIn" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="Kode" hidden>
-    <button id="btnNetGo" type="button" hidden>Tilslut</button>
+    <button id="btnCopy" type="button" hidden data-i18n="copyCode">Copy code</button>
+    <input id="netIn" type="text" maxlength="5" autocomplete="off" spellcheck="false" data-i18n-placeholder="codePh" placeholder="Code" hidden>
+    <button id="btnNetGo" type="button" hidden data-i18n="join">Join</button>
     <p id="netStatus" class="hint"></p>
-    <button id="btnNetBack" class="secondary" type="button">Tilbage</button>
+    <button id="btnNetBack" class="secondary" type="button" data-i18n="back">Back</button>
   </div>
 
   <div id="lobby" class="panel" hidden>
-    <p class="hint">Rumkode</p>
+    <p class="hint" data-i18n="roomCode">Room code</p>
     <div id="lobbyCode" class="room-code">·····</div>
-    <button id="btnCopyLobby" type="button">Kopiér kode</button>
-    <label class="field-label" for="lobbyName">Dit navn</label>
-    <input id="lobbyName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" placeholder="Navn">
+    <button id="btnCopyLobby" type="button" data-i18n="copyCode">Copy code</button>
+    <label class="field-label" for="lobbyName" data-i18n="yourName">Your name</label>
+    <input id="lobbyName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" placeholder="Name">
     <ul id="rosterList" class="roster"></ul>
     <p id="lobbyStatus" class="hint"></p>
-    <button id="btnReady" type="button">Klar</button>
-    <button id="btnLobbyLeave" class="secondary" type="button">Forlad</button>
+    <button id="btnReady" type="button" data-i18n="ready">Ready</button>
+    <button id="btnLobbyLeave" class="secondary" type="button" data-i18n="leave">Leave</button>
   </div>
 
   <div id="game" hidden>
     <div id="boards" class="boards"></div>
     <p class="hint" id="ctrlHint"></p>
-    <button id="btnAgain" class="secondary" type="button" hidden>Spil igen</button>
-    <button id="btnMenu" class="secondary" type="button">Menu</button>
+    <button id="btnAgain" class="secondary" type="button" hidden data-i18n="playAgain">Play again</button>
+    <button id="btnMenu" class="secondary" type="button" data-i18n="menu">Menu</button>
 
     <div id="pads" class="pads">
       <div class="pad" data-who="0">
-        <span class="pad-tag" id="padTag0">Dig</span>
+        <span class="pad-tag" id="padTag0">You</span>
         <div class="pad-grid">
           <button type="button" data-act="left">◀</button>
           <button type="button" data-act="rot">↻</button>

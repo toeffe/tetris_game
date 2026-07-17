@@ -16,6 +16,190 @@
   const GARBAGE = {1:0,2:1,3:2,4:4};
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const NAME_KEY = 'stonefall-name';
+  const LANG_KEY = 'stonefall-lang';
+
+  const STR = {
+    en: {
+      subtitle: 'Tetris battle',
+      yourName: 'Your name',
+      namePh: 'Name',
+      hostGame: 'Host game',
+      joinGame: 'Join game',
+      menuHint: 'Up to 8 players.',
+      copyCode: 'Copy code',
+      codePh: 'Code',
+      join: 'Join',
+      back: 'Back',
+      roomCode: 'Room code',
+      ready: 'Ready',
+      unready: 'Unready',
+      leave: 'Leave',
+      playAgain: 'Play again',
+      menu: 'Menu',
+      you: 'You',
+      youTag: ' (you)',
+      waiting: 'Waiting',
+      next: 'Next',
+      meta: 'LV {lv} · {lines} lines',
+      defaultName: 'Player',
+      topOut: 'TOP OUT',
+      eliminated: 'ELIMINATED',
+      victory: 'VICTORY',
+      draw: 'DRAW',
+      wins: '{name} WINS',
+      rosterStatus: '{n}/{max} · {ready} ready',
+      needTwo: ' · need at least 2',
+      waitReady: ' · waiting for ready',
+      startingSoon: ' · starting…',
+      ctrlHint: 'WASD + space · last survivor wins · garbage hits everyone',
+      rematchStart: 'Starting…',
+      rematchWait: 'Waiting for others ({ready}/{n})…',
+      rematchPartial: '{ready}/{n} ready',
+      rematchAll: 'Everyone must click Play again',
+      matchStarted: 'Match already started',
+      roomFull: 'Room full',
+      rejected: 'Rejected',
+      joinedLobby: 'Joined lobby…',
+      disconnected: 'Disconnected from host.',
+      connError: 'Connection error.',
+      enterCode: 'Enter the 5-character room code.',
+      createFail: 'Could not create room ({err}).',
+      hostFail: 'Could not host.',
+      needCode: 'Need a 5-character code.',
+      connecting: 'Connecting…',
+      joinFail: 'Join failed ({err}).',
+      codeCopied: 'Code copied.',
+      copyFail: 'Copy failed — share the code manually.',
+      err: 'error',
+    },
+    da: {
+      subtitle: 'Tetris-kamp',
+      yourName: 'Dit navn',
+      namePh: 'Navn',
+      hostGame: 'Opret spil',
+      joinGame: 'Tilslut spil',
+      menuHint: 'Op til 8 spillere.',
+      copyCode: 'Kopiér kode',
+      codePh: 'Kode',
+      join: 'Tilslut',
+      back: 'Tilbage',
+      roomCode: 'Rumkode',
+      ready: 'Klar',
+      unready: 'Ikke klar',
+      leave: 'Forlad',
+      playAgain: 'Spil igen',
+      menu: 'Menu',
+      you: 'Dig',
+      youTag: ' (dig)',
+      waiting: 'Venter',
+      next: 'Næste',
+      meta: 'NIV {lv} · {lines} linjer',
+      defaultName: 'Spiller',
+      topOut: 'TOPPET UD',
+      eliminated: 'ELIMINERET',
+      victory: 'SEJR',
+      draw: 'UAFGJORT',
+      wins: '{name} VINDER',
+      rosterStatus: '{n}/{max} · {ready} klar',
+      needTwo: ' · mindst 2 spillere',
+      waitReady: ' · venter på klar',
+      startingSoon: ' · starter…',
+      ctrlHint: 'WASD + mellemrum · sidste overlevende vinder · skrald rammer alle',
+      rematchStart: 'Starter…',
+      rematchWait: 'Venter på de andre ({ready}/{n})…',
+      rematchPartial: '{ready}/{n} klar',
+      rematchAll: 'Alle skal trykke på Spil igen',
+      matchStarted: 'Kampen er allerede startet',
+      roomFull: 'Rummet er fuldt',
+      rejected: 'Afvist',
+      joinedLobby: 'Tilsluttet lobby…',
+      disconnected: 'Forbindelsen til værten blev afbrudt.',
+      connError: 'Forbindelsesfejl.',
+      enterCode: 'Indtast rumkoden på 5 tegn.',
+      createFail: 'Kunne ikke oprette rum ({err}).',
+      hostFail: 'Kunne ikke oprette som vært.',
+      needCode: 'Brug en kode på 5 tegn.',
+      connecting: 'Forbinder…',
+      joinFail: 'Tilslutning mislykkedes ({err}).',
+      codeCopied: 'Kode kopieret.',
+      copyFail: 'Kopiering mislykkedes — del koden manuelt.',
+      err: 'fejl',
+    },
+  };
+
+  const REASON_KEYS = { match_started: 'matchStarted', room_full: 'roomFull' };
+
+  function detectLang() {
+    try {
+      const saved = localStorage.getItem(LANG_KEY);
+      if (saved === 'en' || saved === 'da') return saved;
+    } catch (_) {}
+    const nav = (navigator.language || '').toLowerCase();
+    return nav.startsWith('da') ? 'da' : 'en';
+  }
+
+  let lang = detectLang();
+
+  function t(key, vars) {
+    let s = (STR[lang] && STR[lang][key]) || STR.en[key] || key;
+    if (vars) {
+      Object.keys(vars).forEach(k => {
+        s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), String(vars[k]));
+      });
+    }
+    return s;
+  }
+
+  function reasonText(reason) {
+    const key = REASON_KEYS[reason];
+    return key ? t(key) : (reason || t('rejected'));
+  }
+
+  function setLang(next) {
+    if (next !== 'en' && next !== 'da') return;
+    lang = next;
+    try { localStorage.setItem(LANG_KEY, lang); } catch (_) {}
+    applyI18n();
+  }
+
+  function applyI18n() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (key) el.textContent = t(key);
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+      const key = el.getAttribute('data-i18n-placeholder');
+      if (key) el.placeholder = t(key);
+    });
+    const da = $('btnLangDa'), en = $('btnLangEn');
+    if (da) da.classList.toggle('active', lang === 'da');
+    if (en) en.classList.toggle('active', lang === 'en');
+    // Refresh dynamic UI if present
+    if (typeof renderRoster === 'function' && matchPhase === 'lobby') renderRoster();
+    if (typeof updateRematchHint === 'function' && matchPhase === 'post') updateRematchHint();
+    if (btnAgain && !btnAgain.hidden) {
+      if (btnAgain.disabled && matchPhase === 'post') btnAgain.textContent = t('ready');
+      else if (matchPhase === 'post' || matchPhase === 'playing') btnAgain.textContent = t('playAgain');
+    }
+    if ($('ctrlHint') && matchPhase === 'playing') $('ctrlHint').textContent = t('ctrlHint');
+    if ($('netLabel') && !$('netPanel').hidden && mode === 'guest') {
+      $('netLabel').textContent = t('enterCode');
+    }
+    boards.forEach(b => {
+      if (b.els && b.els.miniLabel) b.els.miniLabel.textContent = t('next');
+      if (b.els && b.els.meta) {
+        const lv = b.els.level ? b.els.level.textContent : '1';
+        const ln = b.els.lines ? b.els.lines.textContent : '0';
+        b.els.meta.innerHTML = t('meta', {lv: '<span class="lv">' + lv + '</span>', lines: '<span class="ln">' + ln + '</span>'});
+        b.els.level = b.els.meta.querySelector('.lv');
+        b.els.lines = b.els.meta.querySelector('.ln');
+      }
+      if (b.over && b.els && b.els.over) {
+        b.els.over.textContent = b.live && eliminated ? t('eliminated') : t('topOut');
+      }
+    });
+  }
 
   const $ = id => document.getElementById(id);
   const menu = $('menu'), netPanel = $('netPanel'), lobbyEl = $('lobby'), gameEl = $('game');
@@ -25,7 +209,7 @@
 
   function sanitizeName(raw) {
     const s = String(raw || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 12);
-    return s || 'Spiller';
+    return s || t('defaultName');
   }
 
   function getPlayerName() {
@@ -35,7 +219,7 @@
       const stored = localStorage.getItem(NAME_KEY);
       if (stored) return sanitizeName(stored);
     } catch (_) {}
-    return 'Spiller';
+    return t('defaultName');
   }
 
   function setPlayerName(raw) {
@@ -139,7 +323,7 @@
       this.piece = {type, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: 0};
       if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
         this.over = true;
-        if (this.els.over) this.els.over.textContent = 'TOPPET UD';
+        if (this.els.over) this.els.over.textContent = t('topOut');
         onTopOut(this);
       }
     }
@@ -326,7 +510,7 @@
       this.lines = data.lines;
       this.over = !!data.over;
       this.paintHud();
-      if (this.els.over) this.els.over.textContent = this.over ? 'TOPPET UD' : '';
+      if (this.els.over) this.els.over.textContent = this.over ? t('topOut') : '';
     }
   }
 
@@ -365,7 +549,7 @@
     side.className = 'side';
     const miniLabel = document.createElement('div');
     miniLabel.className = 'mini-label';
-    miniLabel.textContent = 'Næste';
+    miniLabel.textContent = t('next');
     const next = document.createElement('canvas');
     next.width = nw;
     next.height = nw;
@@ -374,7 +558,7 @@
     score.textContent = '0';
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.innerHTML = 'NIV <span class="lv">1</span> · <span class="ln">0</span> linjer';
+    meta.innerHTML = t('meta', {lv: '<span class="lv">1</span>', lines: '<span class="ln">0</span>'});
     const over = document.createElement('div');
     over.className = 'over';
     side.append(miniLabel, next, score, meta, over);
@@ -390,6 +574,8 @@
         lines: meta.querySelector('.ln'),
         over,
         title,
+        miniLabel,
+        meta,
       },
       live, block, playerId, nextSize: nw,
     });
@@ -405,23 +591,23 @@
       if (p.id === myId) li.classList.add('me');
       if (p.ready) li.classList.add('ready');
       const name = document.createElement('span');
-      name.textContent = p.name + (p.id === myId ? ' (dig)' : '');
+      name.textContent = p.name + (p.id === myId ? t('youTag') : '');
       const tag = document.createElement('span');
       tag.className = 'tag';
-      tag.textContent = p.ready ? 'Klar' : 'Venter';
+      tag.textContent = p.ready ? t('ready') : t('waiting');
       li.append(name, tag);
       rosterList.appendChild(li);
     });
     const n = roster.length;
     const readyN = roster.filter(p => p.ready).length;
-    let status = n + '/' + MAX_PLAYERS + ' · ' + readyN + ' klar';
-    if (n < 2) status += ' · mindst 2 spillere';
-    else if (readyN < n) status += ' · venter på klar';
-    else status += ' · starter…';
+    let status = t('rosterStatus', {n, max: MAX_PLAYERS, ready: readyN});
+    if (n < 2) status += t('needTwo');
+    else if (readyN < n) status += t('waitReady');
+    else status += t('startingSoon');
     $('lobbyStatus').textContent = status;
 
     const me = roster.find(p => p.id === myId);
-    btnReady.textContent = me?.ready ? 'Ikke klar' : 'Klar';
+    btnReady.textContent = me?.ready ? t('unready') : t('ready');
     btnReady.classList.toggle('ready-on', !!me?.ready);
   }
 
@@ -452,7 +638,7 @@
     hide(banner);
     hide(btnAgain);
     btnAgain.disabled = false;
-    btnAgain.textContent = 'Spil igen';
+    btnAgain.textContent = t('playAgain');
     show(menu);
   }
 
@@ -462,10 +648,11 @@
     eliminated = false;
     matchPhase = 'playing';
     running = true;
+    resetHeldKeys();
     hide(banner);
     hide(btnAgain);
     btnAgain.disabled = false;
-    btnAgain.textContent = 'Spil igen';
+    btnAgain.textContent = t('playAgain');
     roster.forEach(p => { p.alive = true; p.ready = false; });
     last = performance.now();
     stopLoop();
@@ -481,6 +668,7 @@
     const dt = t - last;
     last = t;
     if (running && matchPhase === 'playing' && !ended) {
+      tickHeldKeys(dt);
       for (const b of boards) if (b.live) b.tick(dt);
     }
     for (const b of boards) b.draw();
@@ -504,17 +692,17 @@
   function onTopOut(board) {
     if (!board.live || eliminated || ended) return;
     eliminated = true;
-    if (board.els.over) board.els.over.textContent = 'ELIMINERET';
+    if (board.els.over) board.els.over.textContent = t('eliminated');
     markDead(board.playerId);
     netSend({t: 'over', from: board.playerId});
-    showBanner('ELIMINERET', 'lose');
+    showBanner(t('eliminated'), 'lose');
   }
 
   function markDead(id) {
     const p = roster.find(x => x.id === id);
     if (p) p.alive = false;
     const b = boardById.get(id);
-    if (b && b.els.over) b.els.over.textContent = 'TOPPET UD';
+    if (b && b.els.over) b.els.over.textContent = t('topOut');
   }
 
   function checkWinner() {
@@ -528,7 +716,7 @@
       broadcastOrLocal({t: 'win', id: winner.id});
       applyWin(winner.id);
     } else {
-      showBanner('UAFGJORT', 'lose');
+      showBanner(t('draw'), 'lose');
       showRematchBtn();
     }
   }
@@ -537,17 +725,17 @@
     ended = true;
     matchPhase = 'post';
     roster.forEach(p => { p.ready = false; });
-    if (winnerId === myId) showBanner('SEJR', 'win');
+    if (winnerId === myId) showBanner(t('victory'), 'win');
     else {
       const w = roster.find(p => p.id === winnerId);
-      showBanner((w?.name || 'Spiller') + ' VINDER', 'lose');
+      showBanner(t('wins', {name: w?.name || t('defaultName')}), 'lose');
     }
     showRematchBtn();
     updateRematchHint();
   }
 
   function showRematchBtn() {
-    btnAgain.textContent = 'Spil igen';
+    btnAgain.textContent = t('playAgain');
     btnAgain.disabled = false;
     show(btnAgain);
   }
@@ -570,10 +758,10 @@
     if (!hint) return;
     const readyN = roster.filter(p => p.ready).length;
     const n = roster.length;
-    if (n && readyN >= n) hint.textContent = 'Starter…';
-    else if (roster.find(p => p.id === myId)?.ready) hint.textContent = 'Venter på de andre (' + readyN + '/' + n + ')…';
-    else if (readyN) hint.textContent = readyN + '/' + n + ' klar';
-    else hint.textContent = 'Alle skal trykke på Spil igen';
+    if (n && readyN >= n) hint.textContent = t('rematchStart');
+    else if (roster.find(p => p.id === myId)?.ready) hint.textContent = t('rematchWait', {ready: readyN, n});
+    else if (readyN) hint.textContent = t('rematchPartial', {ready: readyN, n});
+    else hint.textContent = t('rematchAll');
   }
 
   function rematch() {
@@ -582,7 +770,7 @@
     if (!me || me.ready) return;
     me.ready = true;
     btnAgain.disabled = true;
-    btnAgain.textContent = 'Klar';
+    btnAgain.textContent = t('ready');
     netSend({t: 'rematch', from: myId});
     updateRematchHint();
     if (mode === 'host') {
@@ -696,7 +884,7 @@
     hide(netPanel);
     show(gameEl);
     $('padTag0').textContent = getPlayerName();
-    $('ctrlHint').textContent = 'WASD + mellemrum · sidste overlevende vinder · skrald rammer alle';
+    $('ctrlHint').textContent = t('ctrlHint');
     clearBoards();
     players.forEach(p => {
       createBoardSlot(p.id, p.name, p.id === myId, p.id === myId);
@@ -713,13 +901,13 @@
     if (!data || typeof data !== 'object') return;
     if (data.t === 'hello') {
       if (matchPhase !== 'lobby') {
-        sendTo(connections.get(fromId), {t: 'reject', reason: 'kampen er allerede startet'});
+        sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
         connections.get(fromId)?.close();
         connections.delete(fromId);
         return;
       }
       if (roster.length >= MAX_PLAYERS) {
-        sendTo(connections.get(fromId), {t: 'reject', reason: 'rummet er fuldt'});
+        sendTo(connections.get(fromId), {t: 'reject', reason: 'room_full'});
         connections.get(fromId)?.close();
         connections.delete(fromId);
         return;
@@ -778,8 +966,8 @@
   function onGuestData(data) {
     if (!data || typeof data !== 'object') return;
     if (data.t === 'reject') {
-      $('netStatus').textContent = data.reason || 'Afvist';
-      $('lobbyStatus').textContent = data.reason || 'Afvist';
+      $('netStatus').textContent = reasonText(data.reason);
+      $('lobbyStatus').textContent = reasonText(data.reason);
       closeNet();
       hide(lobbyEl);
       show(netPanel);
@@ -852,7 +1040,7 @@
   function wireGuestConn(c) {
     guestConn = c;
     const onOpen = () => {
-      $('netStatus').textContent = 'Tilsluttet lobby…';
+      $('netStatus').textContent = t('joinedLobby');
       sendTo(c, {t: 'hello', name: getPlayerName()});
     };
     if (c.open) onOpen();
@@ -860,7 +1048,7 @@
     c.on('data', onGuestData);
     c.on('close', () => {
       if (matchPhase !== 'idle') {
-        $('ctrlHint').textContent = 'Forbindelsen til værten blev afbrudt.';
+        $('ctrlHint').textContent = t('disconnected');
         if (matchPhase === 'lobby') {
           hide(lobbyEl);
           showMenu();
@@ -868,7 +1056,7 @@
       }
     });
     c.on('error', () => {
-      $('netStatus').textContent = 'Forbindelsesfejl.';
+      $('netStatus').textContent = t('connError');
       $('btnNetGo').disabled = false;
     });
   }
@@ -910,7 +1098,7 @@
   }
 
   function showJoinUI() {
-    $('netLabel').textContent = 'Indtast rumkoden på 5 tegn.';
+    $('netLabel').textContent = t('enterCode');
     hide($('roomCode'));
     hide($('btnCopy'));
     show($('netIn'));
@@ -931,14 +1119,14 @@
     peer.on('connection', c => {
       if (matchPhase !== 'lobby') {
         c.on('open', () => {
-          sendTo(c, {t: 'reject', reason: 'kampen er allerede startet'});
+          sendTo(c, {t: 'reject', reason: 'match_started'});
           c.close();
         });
         return;
       }
       if (roster.length >= MAX_PLAYERS) {
         c.on('open', () => {
-          sendTo(c, {t: 'reject', reason: 'rummet er fuldt'});
+          sendTo(c, {t: 'reject', reason: 'room_full'});
           c.close();
         });
         return;
@@ -952,13 +1140,13 @@
       }
       hide(lobbyEl);
       show(netPanel);
-      $('netStatus').textContent = 'Kunne ikke oprette rum (' + (err.type || 'fejl') + ').';
+      $('netStatus').textContent = t('createFail', {err: err.type || t('err')});
       show($('btnCopy'));
       hide($('netIn'));
       hide($('btnNetGo'));
       hide($('roomCode'));
       hide($('btnCopy'));
-      $('netLabel').textContent = 'Kunne ikke oprette som vært.';
+      $('netLabel').textContent = t('hostFail');
     });
   }
 
@@ -966,7 +1154,7 @@
     setPlayerName(menuName.value || lobbyName.value || getPlayerName());
     const code = ($('netIn').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (code.length !== 5) {
-      $('netStatus').textContent = 'Brug en kode på 5 tegn.';
+      $('netStatus').textContent = t('needCode');
       return;
     }
     closeNet();
@@ -974,7 +1162,7 @@
     matchPhase = 'lobby';
     roomCode = code;
     $('btnNetGo').disabled = true;
-    $('netStatus').textContent = 'Forbinder…';
+    $('netStatus').textContent = t('connecting');
     peer = new Peer();
     peer.on('open', () => {
       myId = peer.id;
@@ -982,7 +1170,7 @@
     });
     peer.on('error', err => {
       $('btnNetGo').disabled = false;
-      $('netStatus').textContent = 'Tilslutning mislykkedes (' + (err.type || 'fejl') + ').';
+      $('netStatus').textContent = t('joinFail', {err: err.type || t('err')});
     });
   }
 
@@ -1001,7 +1189,79 @@
     }
   }
 
-  /* ---------- input ---------- */
+  /* ---------- input (DAS/ARR — no OS key-repeat lag) ---------- */
+  const DAS_MS = 100;
+  const ARR_MS = 25;
+  const SOFT_MS = 40;
+  const held = { left: false, right: false, soft: false };
+  let shiftDir = 0; // -1 left, 1 right, 0 none
+  let shiftDas = true;
+  let shiftAcc = 0;
+  let softAcc = 0;
+
+  function resetHeldKeys() {
+    held.left = held.right = held.soft = false;
+    shiftDir = 0;
+    shiftDas = true;
+    shiftAcc = 0;
+    softAcc = 0;
+  }
+
+  function pressHorz(dir) {
+    if (dir < 0) held.left = true;
+    else held.right = true;
+    shiftDir = dir;
+    shiftDas = true;
+    shiftAcc = 0;
+    act(dir < 0 ? 'left' : 'right');
+  }
+
+  function releaseHorz(dir) {
+    if (dir < 0) held.left = false;
+    else held.right = false;
+    if (shiftDir !== dir) return;
+    if (held.left) {
+      shiftDir = -1;
+      shiftDas = true;
+      shiftAcc = 0;
+      act('left');
+    } else if (held.right) {
+      shiftDir = 1;
+      shiftDas = true;
+      shiftAcc = 0;
+      act('right');
+    } else {
+      shiftDir = 0;
+      shiftDas = true;
+      shiftAcc = 0;
+    }
+  }
+
+  function tickHeldKeys(dt) {
+    if (shiftDir) {
+      shiftAcc += dt;
+      if (shiftDas) {
+        if (shiftAcc >= DAS_MS) {
+          shiftDas = false;
+          shiftAcc = 0;
+          act(shiftDir < 0 ? 'left' : 'right');
+        }
+      } else {
+        while (shiftAcc >= ARR_MS) {
+          shiftAcc -= ARR_MS;
+          act(shiftDir < 0 ? 'left' : 'right');
+        }
+      }
+    }
+    if (held.soft) {
+      softAcc += dt;
+      while (softAcc >= SOFT_MS) {
+        softAcc -= SOFT_MS;
+        act('soft');
+      }
+    }
+  }
+
   function act(action) {
     if (matchPhase !== 'playing' || ended || eliminated) return;
     const b = boards.find(x => x.live);
@@ -1015,20 +1275,78 @@
 
   document.addEventListener('keydown', e => {
     if (matchPhase !== 'playing' || ended || eliminated) return;
+    // Don't steal typing from name/code fields
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
     const k = e.key;
-    const map = {a:'left', A:'left', d:'right', D:'right', w:'rot', W:'rot', s:'soft', S:'soft', ' ':'hard'};
-    if (map[k]) {
-      act(map[k]);
+    if (k === 'a' || k === 'A') {
+      if (e.repeat) { e.preventDefault(); return; }
+      pressHorz(-1);
+      e.preventDefault();
+      return;
+    }
+    if (k === 'd' || k === 'D') {
+      if (e.repeat) { e.preventDefault(); return; }
+      pressHorz(1);
+      e.preventDefault();
+      return;
+    }
+    if (k === 's' || k === 'S') {
+      if (e.repeat) { e.preventDefault(); return; }
+      held.soft = true;
+      softAcc = SOFT_MS; // soft once immediately
+      e.preventDefault();
+      return;
+    }
+    if (k === 'w' || k === 'W') {
+      if (e.repeat) { e.preventDefault(); return; }
+      act('rot');
+      e.preventDefault();
+      return;
+    }
+    if (k === ' ') {
+      if (e.repeat) { e.preventDefault(); return; }
+      act('hard');
       e.preventDefault();
     }
   });
 
+  document.addEventListener('keyup', e => {
+    const k = e.key;
+    if (k === 'a' || k === 'A') releaseHorz(-1);
+    else if (k === 'd' || k === 'D') releaseHorz(1);
+    else if (k === 's' || k === 'S') {
+      held.soft = false;
+      softAcc = 0;
+    }
+  });
+
+  window.addEventListener('blur', resetHeldKeys);
+
   document.querySelectorAll('.pad button[data-act]').forEach(btn => {
-    const fire = ev => {
+    const action = btn.dataset.act;
+    const onDown = ev => {
       ev.preventDefault();
-      act(btn.dataset.act);
+      if (action === 'left') pressHorz(-1);
+      else if (action === 'right') pressHorz(1);
+      else if (action === 'soft') {
+        held.soft = true;
+        softAcc = SOFT_MS;
+      } else act(action);
     };
-    btn.addEventListener('pointerdown', fire);
+    const onUp = () => {
+      if (action === 'left') releaseHorz(-1);
+      else if (action === 'right') releaseHorz(1);
+      else if (action === 'soft') {
+        held.soft = false;
+        softAcc = 0;
+      }
+    };
+    btn.addEventListener('pointerdown', onDown);
+    btn.addEventListener('pointerup', onUp);
+    btn.addEventListener('pointerleave', onUp);
+    btn.addEventListener('pointercancel', onUp);
     btn.addEventListener('click', ev => ev.preventDefault());
   });
 
@@ -1060,14 +1378,17 @@
   async function copyCode() {
     try {
       await navigator.clipboard.writeText(roomCode || $('lobbyCode').textContent);
-      $('lobbyStatus').textContent = 'Kode kopieret.';
-      if (!$('netPanel').hidden) $('netStatus').textContent = 'Kode kopieret.';
+      $('lobbyStatus').textContent = t('codeCopied');
+      if (!$('netPanel').hidden) $('netStatus').textContent = t('codeCopied');
     } catch (_) {
-      $('lobbyStatus').textContent = 'Kopiering mislykkedes — del koden manuelt.';
+      $('lobbyStatus').textContent = t('copyFail');
     }
   }
   $('btnCopy').onclick = copyCode;
   $('btnCopyLobby').onclick = copyCode;
   $('btnMenu').onclick = showMenu;
   $('btnAgain').onclick = rematch;
+  $('btnLangDa').onclick = () => setLang('da');
+  $('btnLangEn').onclick = () => setLang('en');
+  applyI18n();
 })();
