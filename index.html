@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STONEFALL Tetris Battle</title>
+<script src="./peerjs.min.js"></script>
+<style>
+  @font-face{
+    font-family:'Cinzel';
+    font-style:normal;
+    font-weight:400 700;
+    font-display:swap;
+    src:url('./fonts/cinzel.woff2') format('woff2');
+  }
+  @font-face{
+    font-family:'Cinzel Decorative';
+    font-style:normal;
+    font-weight:700;
+    font-display:swap;
+    src:url('./fonts/cinzel-decorative.woff2') format('woff2');
+  }
+  :root{
+    --font-display: 'Cinzel Decorative', 'Palatino Linotype', Palatino, Georgia, serif;
+    --font-body: 'Cinzel', 'Palatino Linotype', Palatino, Georgia, serif;
+    --bg:#1a1510;
+    --panel:#3d2a1a;
+    --parchment:#e8d9b5;
+    --gold:#c9a227;
+    --bronze:#8b6914;
+    --crimson:#8b1a1a;
+    --iron:#4a453f;
+    --text:#f0e6d0;
+    --muted:#a89878;
+    --stone:#2a241c;
+    --wood:#5c3d22;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(ellipse at 15% 20%, rgba(180,90,20,0.18) 0%, transparent 45%),
+      radial-gradient(ellipse at 85% 15%, rgba(180,90,20,0.14) 0%, transparent 40%),
+      radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.55) 0%, transparent 55%),
+      linear-gradient(180deg, #2c2418 0%, #1a1510 40%, #12100c 100%);
+    color:var(--text);
+    font-family:var(--font-body);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:24px 16px 60px;
+    overflow-x:hidden;
+    position:relative;
+  }
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse at 50% 0%, transparent 40%, rgba(0,0,0,0.55) 100%),
+      repeating-linear-gradient(90deg, transparent 0px, transparent 47px, rgba(0,0,0,0.06) 47px, rgba(0,0,0,0.06) 48px),
+      repeating-linear-gradient(0deg, transparent 0px, transparent 47px, rgba(0,0,0,0.06) 47px, rgba(0,0,0,0.06) 48px);
+    pointer-events:none;
+    z-index:9999;
+  }
+  h1.title{
+    font-family:var(--font-display);
+    font-size:2.6em;
+    letter-spacing:8px;
+    margin:0 0 4px;
+    color:var(--gold);
+    text-shadow:
+      0 2px 0 #5c3d00,
+      0 0 24px rgba(201,162,39,0.35),
+      0 0 60px rgba(139,26,26,0.25);
+    text-align:center;
+  }
+  .subtitle{
+    color:var(--muted);
+    letter-spacing:4px;
+    font-size:0.75em;
+    margin-bottom:24px;
+    text-transform:uppercase;
+    font-variant:small-caps;
+  }
+
+  #setup{
+    background:
+      linear-gradient(160deg, #6b4423 0%, #4a2f18 45%, #3d2514 100%);
+    border:3px solid var(--bronze);
+    outline:1px solid var(--gold);
+    outline-offset:-6px;
+    padding:32px 30px;
+    border-radius:6px;
+    text-align:center;
+    width:360px;
+    box-shadow:
+      0 0 0 1px #2a1808,
+      inset 0 1px 0 rgba(232,217,181,0.15),
+      0 16px 40px rgba(0,0,0,0.55);
+    position:relative;
+  }
+  #setup::before,
+  #setup::after{
+    content:"";
+    position:absolute;
+    width:10px; height:10px;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 35%, #c8c0b0 0%, #6a6558 45%, #2a2820 100%);
+    box-shadow:0 1px 2px rgba(0,0,0,0.6), 324px 0 0 #6a6558;
+  }
+  #setup::before{ top:10px; left:10px; }
+  #setup::after{ bottom:10px; left:10px; }
+  .id-label{
+    color:var(--parchment);
+    font-size:0.75em;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    font-variant:small-caps;
+    margin-bottom:6px;
+    opacity:0.85;
+  }
+  #my-id{
+    color:var(--gold);
+    font-size:1.25em;
+    letter-spacing:2px;
+    text-shadow:0 1px 0 #3d2a00;
+    display:inline-block;
+    margin-bottom:18px;
+    word-break:break-all;
+  }
+  input{
+    padding:12px;
+    border-radius:3px;
+    border:2px solid var(--iron);
+    background:var(--parchment);
+    color:#2a1f12;
+    margin:6px 0 16px;
+    width:100%;
+    font-size:15px;
+    font-family:inherit;
+    letter-spacing:1px;
+  }
+  input::placeholder{color:#8a7a5c;}
+  input:focus{outline:none; border-color:var(--gold); box-shadow:0 0 0 2px rgba(201,162,39,0.35);}
+  button{
+    padding:12px 20px;
+    cursor:pointer;
+    background:linear-gradient(180deg, #6b4e16 0%, #4a350e 100%);
+    border:2px solid var(--gold);
+    color:var(--parchment);
+    font-weight:700;
+    letter-spacing:2px;
+    border-radius:3px;
+    width:100%;
+    font-size:14px;
+    font-family:var(--font-body);
+    font-variant:small-caps;
+    transition:all 0.15s ease;
+    text-transform:uppercase;
+    box-shadow:inset 0 1px 0 rgba(255,220,120,0.25), 0 3px 8px rgba(0,0,0,0.4);
+  }
+  button:hover{
+    background:linear-gradient(180deg, var(--gold) 0%, #a8841a 100%);
+    color:#1a1208;
+    box-shadow:0 0 18px rgba(201,162,39,0.4);
+  }
+  button:disabled{ opacity:0.4; cursor:not-allowed; }
+  button.secondary{
+    border-color:#a84848;
+    color:#f0c8c8;
+    margin-top:10px;
+    background:linear-gradient(180deg, #5c2020 0%, #3d1212 100%);
+  }
+  button.secondary:hover{
+    background:linear-gradient(180deg, var(--crimson) 0%, #5c1010 100%);
+    color:var(--parchment);
+    box-shadow:0 0 18px rgba(139,26,26,0.5);
+  }
+  #status{ margin-top:16px; font-style:italic; color:var(--muted); font-size:13px; min-height:18px;}
+
+  #game-area{
+    display:none;
+    flex-direction:row;
+    gap:28px;
+    margin-top:10px;
+    justify-content:center;
+    flex-wrap:wrap;
+  }
+  .player-box{
+    text-align:center;
+    width:auto;
+    min-width:400px;
+    flex-shrink:0;
+    padding:14px 12px 16px;
+    background:
+      linear-gradient(180deg, rgba(92,61,34,0.55) 0%, rgba(42,36,28,0.75) 100%);
+    border:2px solid var(--bronze);
+    outline:1px solid rgba(201,162,39,0.45);
+    outline-offset:-5px;
+    border-radius:4px;
+    box-shadow:inset 0 0 30px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .player-box h3{
+    font-family:var(--font-display);
+    letter-spacing:4px;
+    font-size:0.95em;
+    color:var(--gold);
+    margin:0 0 12px;
+    text-transform:uppercase;
+  }
+  .you h3{ color:var(--gold); }
+  .opp h3{ color:#d4a0a0; }
+  .board-row{
+    display:flex;
+    gap:10px;
+    justify-content:center;
+    align-items:flex-start;
+    flex-wrap:nowrap;
+  }
+  .side-panel{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    width:70px;
+    flex-shrink:0;
+  }
+  .mini-box{
+    background:linear-gradient(160deg, #4a3420 0%, #2a1f14 100%);
+    border:2px solid var(--bronze);
+    border-radius:3px;
+    padding:6px;
+    box-shadow:inset 0 0 12px rgba(0,0,0,0.45);
+  }
+  .mini-label{
+    font-size:0.6em;
+    color:var(--muted);
+    letter-spacing:1px;
+    margin-bottom:4px;
+    text-transform:uppercase;
+    font-variant:small-caps;
+  }
+  canvas.mini{
+    display:block;
+    width:100%;
+    background:#1a1510;
+    border:1px solid var(--iron);
+  }
+  canvas.main-canvas{
+    border:3px solid var(--bronze);
+    background:#16120e;
+    display:block;
+    flex-shrink:0;
+    box-shadow:
+      0 0 0 1px rgba(201,162,39,0.35),
+      inset 0 0 40px rgba(0,0,0,0.65),
+      0 6px 20px rgba(0,0,0,0.45);
+  }
+  .you canvas.main-canvas{ border-color: var(--gold); }
+  .opp canvas.main-canvas{ border-color: #a84848; }
+
+  .stats{
+    display:flex;
+    justify-content:space-between;
+    margin-top:10px;
+    padding:0 8px;
+    font-size:0.75em;
+    color:var(--muted);
+    letter-spacing:1px;
+    font-variant:small-caps;
+  }
+  .score{
+    font-size:1.6em;
+    margin-top:10px;
+    color:var(--gold);
+    text-shadow:0 1px 0 #3d2a00, 0 0 12px rgba(201,162,39,0.35);
+    font-weight:700;
+  }
+  .combo{ font-size:0.75em; color:#d4a060; height:16px; letter-spacing:1px;}
+  .game-over-msg{
+    color:#e06060;
+    font-weight:700;
+    font-size:1.1em;
+    margin-top:8px;
+    height:22px;
+    text-shadow:0 0 10px rgba(139,26,26,0.5);
+    letter-spacing:2px;
+  }
+
+  .shake{ animation: shake 0.4s ease; }
+  @keyframes shake{
+    0%,100%{ transform:translate(0,0); }
+    20%{ transform:translate(-6px,3px); }
+    40%{ transform:translate(6px,-3px); }
+    60%{ transform:translate(-4px,2px); }
+    80%{ transform:translate(4px,-2px); }
+  }
+
+  #banner{
+    display:none;
+    position:fixed;
+    top:40%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    font-family:var(--font-display);
+    font-size:2.8em;
+    letter-spacing:6px;
+    z-index:1000;
+    text-align:center;
+    padding:24px 44px;
+    border-radius:4px;
+    background:linear-gradient(160deg, rgba(61,42,26,0.95) 0%, rgba(26,21,16,0.95) 100%);
+    box-shadow:0 0 80px rgba(0,0,0,0.8), inset 0 0 30px rgba(0,0,0,0.4);
+  }
+  #banner.win{
+    color:var(--gold);
+    text-shadow:0 0 24px rgba(201,162,39,0.7);
+    border:2px solid var(--gold);
+  }
+  #banner.lose{
+    color:#e06060;
+    text-shadow:0 0 24px rgba(139,26,26,0.7);
+    border:2px solid var(--crimson);
+  }
+
+  .controls-hint{
+    margin-top:26px;
+    color:var(--muted);
+    font-size:0.7em;
+    letter-spacing:1px;
+    text-align:center;
+    max-width:640px;
+    line-height:1.8;
+  }
+  .controls-hint b{ color:var(--parchment); }
+</style>
+</head>
+<body>
+
+  <h1 class="title">STONEFALL</h1>
+
+  <div id="setup">
+    <div class="id-label">Your Battle Sigil</div>
+    <div id="my-id">...</div>
+    <input type="text" id="remote-id" placeholder="Paste ally's sigil here">
+    <button onclick="connectToPeer()" id="connect-btn">Connect &amp; Battle</button>
+    <p id="status">Kindling the hearthstone...</p>
+  </div>
+
+  <div id="game-area">
+    <div class="player-box you">
+      <h3>You</h3>
+      <div class="board-row">
+        <div class="side-panel">
+          <div class="mini-box">
+            <div class="mini-label">Hold</div>
+            <canvas class="mini" id="localHold" width="60" height="60"></canvas>
+          </div>
+        </div>
+        <canvas class="main-canvas" id="localCanvas" width="240" height="480"></canvas>
+        <div class="side-panel">
+          <div class="mini-box">
+            <div class="mini-label">Next</div>
+            <canvas class="mini" id="localNext" width="60" height="60"></canvas>
+          </div>
+        </div>
+      </div>
+      <div id="localScore" class="score">0</div>
+      <div class="stats">
+        <span>LV <span id="localLevel">1</span></span>
+        <span>LINES <span id="localLines">0</span></span>
+      </div>
+      <div id="localCombo" class="combo"></div>
+      <div id="localStatus" class="game-over-msg"></div>
+    </div>
+
+    <div class="player-box opp">
+      <h3>Opponent</h3>
+      <div class="board-row">
+        <div class="side-panel">
+          <div class="mini-box">
+            <div class="mini-label">Hold</div>
+            <canvas class="mini" id="remoteHold" width="60" height="60"></canvas>
+          </div>
+        </div>
+        <canvas class="main-canvas" id="remoteCanvas" width="240" height="480"></canvas>
+        <div class="side-panel">
+          <div class="mini-box">
+            <div class="mini-label">Next</div>
+            <canvas class="mini" id="remoteNext" width="60" height="60"></canvas>
+          </div>
+        </div>
+      </div>
+      <div id="remoteScore" class="score">0</div>
+      <div class="stats">
+        <span>LV <span id="remoteLevel">1</span></span>
+        <span>LINES <span id="remoteLines">0</span></span>
+      </div>
+      <div id="remoteCombo" class="combo"></div>
+      <div id="remoteStatus" class="game-over-msg"></div>
+    </div>
+  </div>
+
+  <div class="controls-hint" id="controlsHint" style="display:none">
+    <b>&larr; &rarr;</b> move &nbsp; <b>&uarr;</b> rotate &nbsp; <b>&darr;</b> soft drop &nbsp;
+    <b>space</b> hard drop &nbsp; <b>C</b> hold &nbsp; <b>P</b> pause &nbsp;
+    Clearing 2+ lines sends garbage to your opponent. Good luck.
+  </div>
+
+  <div id="banner"></div>
+
+<script>
+/* ============================= NETWORKING ============================= */
+let peer = new Peer();
+let conn = null;
+let gameStarted = false;
+
+const myIdEl = document.getElementById('my-id');
+const statusEl = document.getElementById('status');
+const remoteIdInput = document.getElementById('remote-id');
+const connectBtn = document.getElementById('connect-btn');
+
+peer.on('open', id => { myIdEl.innerText = id; });
+peer.on('error', err => { statusEl.innerText = 'Connection error: ' + err.type; });
+peer.on('connection', c => { conn = c; setupConnection(); });
+
+function connectToPeer() {
+  const rid = remoteIdInput.value.trim();
+  if (!rid) return alert("Paste your friend's ID first");
+  connectBtn.disabled = true;
+  statusEl.innerText = 'Sounding the horn...';
+  conn = peer.connect(rid, { reliable: true });
+  setupConnection();
+}
+
+function setupConnection() {
+  conn.on('open', () => {
+    statusEl.innerText = 'Allied! Battle commencing...';
+    setTimeout(() => {
+      document.getElementById('setup').style.display = 'none';
+      document.getElementById('game-area').style.display = 'flex';
+      document.getElementById('controlsHint').style.display = 'block';
+      startGame();
+    }, 800);
+  });
+
+  conn.on('data', data => {
+    switch (data.type) {
+      case 'state': applyRemoteState(data); break;
+      case 'garbage': if (game) game.addGarbage(data.n); break;
+      case 'gameover': onOpponentGameOver(); break;
+      case 'rematch':
+        remoteRematchReady = true;
+        updateRematchUI();
+        tryStartRematch();
+        break;
+    }
+  });
+
+  conn.on('close', () => {
+    statusEl.innerText = 'Peer disconnected.';
+  });
+}
+
+function send(msg) {
+  if (conn && conn.open) {
+    try { conn.send(msg); } catch (e) {}
+  }
+}
+
+/* ============================= TETRIS CORE ============================= */
+const COLS = 10, ROWS = 20, BLOCK = 24;
+
+const SHAPES = {
+  I: { color:'#5ec8d4', m:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]] }, // aquamarine
+  O: { color:'#e6c84a', m:[[1,1],[1,1]] }, // topaz
+  T: { color:'#9b5fd4', m:[[0,1,0],[1,1,1],[0,0,0]] }, // amethyst
+  S: { color:'#4ecf7a', m:[[0,1,1],[1,1,0],[0,0,0]] }, // emerald
+  Z: { color:'#d9445a', m:[[1,1,0],[0,1,1],[0,0,0]] }, // ruby
+  J: { color:'#4a7fd4', m:[[1,0,0],[1,1,1],[0,0,0]] }, // sapphire
+  L: { color:'#e08a3c', m:[[0,0,1],[1,1,1],[0,0,0]] }, // citrine
+};
+const TYPES = Object.keys(SHAPES);
+
+function rotateMatrix(m) {
+  const n = m.length;
+  const res = Array.from({length:n}, () => Array(n).fill(0));
+  for (let r=0; r<n; r++) for (let c=0; c<n; c++) res[c][n-1-r] = m[r][c];
+  return res;
+}
+
+function randomBagPiece(bag) {
+  if (bag.length === 0) {
+    bag.push(...TYPES);
+    // shuffle
+    for (let i = bag.length-1; i>0; i--) {
+      const j = Math.floor(Math.random()*(i+1));
+      [bag[i],bag[j]] = [bag[j],bag[i]];
+    }
+  }
+  return bag.pop();
+}
+
+class Tetris {
+  constructor(canvas, holdCanvas, nextCanvas, isLocal) {
+    this.ctx = canvas.getContext('2d');
+    this.holdCtx = holdCanvas.getContext('2d');
+    this.nextCtx = nextCanvas.getContext('2d');
+    this.isLocal = isLocal;
+    this.reset(false);
+  }
+
+  reset(silent) {
+    this.grid = Array.from({length:ROWS}, () => Array(COLS).fill(null));
+    this.bag = [];
+    this.nextType = randomBagPiece(this.bag);
+    this.score = 0;
+    this.lines = 0;
+    this.level = 1;
+    this.combo = 0;
+    this.holdType = null;
+    this.canHold = true;
+    this.gameOver = false;
+    this.paused = false;
+    this.dropCounter = 0;
+    this.dropInterval = 1000;
+    this.garbageQueue = 0;
+    this.remoteRender = null; // used for opponent display only
+    this.spawnPiece();
+    if (this.isLocal) {
+      document.getElementById('localStatus').innerText = '';
+      document.getElementById('localCombo').innerText = '';
+    }
+    if (!silent && this.isLocal) this.sendFullState();
+  }
+
+  spawnPiece() {
+    const type = this.nextType;
+    this.nextType = randomBagPiece(this.bag);
+    const shape = SHAPES[type];
+    const m = shape.m.map(row => row.slice());
+    const w = m.length;
+    this.piece = { type, m, color: shape.color, x: Math.floor((COLS - w)/2), y: 0 };
+    this.canHold = true;
+    if (this.collides(this.piece.m, this.piece.x, this.piece.y)) {
+      this.gameOver = true;
+      if (this.isLocal) {
+        document.getElementById('localStatus').innerText = 'YOU LOSE';
+        send({ type:'gameover' });
+        showBanner('DEFEAT', 'lose');
+      }
+    }
+  }
+
+  collides(m, px, py) {
+    for (let r=0; r<m.length; r++) {
+      for (let c=0; c<m.length; c++) {
+        if (!m[r][c]) continue;
+        const x = px + c, y = py + r;
+        if (x < 0 || x >= COLS || y >= ROWS) return true;
+        if (y >= 0 && this.grid[y][x]) return true;
+      }
+    }
+    return false;
+  }
+
+  move(dx) {
+    if (this.gameOver || this.paused) return;
+    if (!this.collides(this.piece.m, this.piece.x+dx, this.piece.y)) {
+      this.piece.x += dx;
+      this.sendFullState();
+    }
+  }
+
+  rotate() {
+    if (this.gameOver || this.paused) return;
+    const rotated = rotateMatrix(this.piece.m);
+    const kicks = [0, -1, 1, -2, 2];
+    for (const k of kicks) {
+      if (!this.collides(rotated, this.piece.x+k, this.piece.y)) {
+        this.piece.m = rotated;
+        this.piece.x += k;
+        this.sendFullState();
+        return;
+      }
+    }
+  }
+
+  softDrop() {
+    if (this.gameOver || this.paused) return;
+    if (!this.collides(this.piece.m, this.piece.x, this.piece.y+1)) {
+      this.piece.y++;
+      this.score += 1;
+      this.dropCounter = 0;
+      this.sendFullState();
+    } else {
+      this.lock();
+    }
+  }
+
+  hardDrop() {
+    if (this.gameOver || this.paused) return;
+    let dist = 0;
+    while (!this.collides(this.piece.m, this.piece.x, this.piece.y+1)) {
+      this.piece.y++; dist++;
+    }
+    this.score += dist * 2;
+    this.lock();
+  }
+
+  hold() {
+    if (this.gameOver || this.paused || !this.canHold) return;
+    const curType = this.piece.type;
+    if (this.holdType === null) {
+      this.holdType = curType;
+      this.spawnPiece();
+    } else {
+      const swap = this.holdType;
+      this.holdType = curType;
+      const shape = SHAPES[swap];
+      const m = shape.m.map(row => row.slice());
+      this.piece = { type: swap, m, color: shape.color, x: Math.floor((COLS-m.length)/2), y:0 };
+      if (this.collides(this.piece.m, this.piece.x, this.piece.y)) {
+        this.gameOver = true;
+        document.getElementById('localStatus').innerText = 'YOU LOSE';
+        send({ type:'gameover' });
+        showBanner('DEFEAT', 'lose');
+      }
+    }
+    this.canHold = false;
+    this.sendFullState();
+  }
+
+  lock() {
+    const m = this.piece.m;
+    for (let r=0; r<m.length; r++) {
+      for (let c=0; c<m.length; c++) {
+        if (!m[r][c]) continue;
+        const x = this.piece.x + c, y = this.piece.y + r;
+        if (y >= 0 && y < ROWS && x >= 0 && x < COLS) this.grid[y][x] = this.piece.color;
+      }
+    }
+    const cleared = this.clearLines();
+    if (cleared > 0) {
+      this.combo++;
+      const base = [0,100,300,500,800][cleared] || 800;
+      this.score += base * this.level + (this.combo>1 ? 50*this.combo*this.level : 0);
+      this.lines += cleared;
+      this.level = 1 + Math.floor(this.lines/10);
+      this.dropInterval = Math.max(120, 1000 - (this.level-1)*75);
+      document.getElementById('localCombo').innerText = this.combo>1 ? `COMBO x${this.combo}` : (cleared===4?'TETRIS!':'');
+      if (this.isLocal) triggerShake();
+      const garbageMap = {1:0,2:1,3:2,4:4};
+      let garbageOut = garbageMap[cleared] || 0;
+      if (this.combo > 1) garbageOut += Math.floor(this.combo/2);
+      if (garbageOut > 0) send({ type:'garbage', n: garbageOut });
+    } else {
+      this.combo = 0;
+      document.getElementById('localCombo').innerText = '';
+    }
+    if (this.garbageQueue > 0) {
+      this._applyGarbageNow(this.garbageQueue);
+      this.garbageQueue = 0;
+    }
+    if (!this.gameOver) this.spawnPiece();
+    this.updateHUD();
+    this.sendFullState();
+  }
+
+  clearLines() {
+    let cleared = 0;
+    for (let r = ROWS-1; r >= 0; r--) {
+      if (this.grid[r].every(cell => cell)) {
+        this.grid.splice(r,1);
+        this.grid.unshift(Array(COLS).fill(null));
+        cleared++;
+        r++;
+      }
+    }
+    return cleared;
+  }
+
+  addGarbage(n) {
+    // queue it so it doesn't corrupt an in-flight piece; applied on next lock,
+    // but if idle for a while apply immediately for responsiveness
+    this.garbageQueue += n;
+  }
+
+  _applyGarbageNow(n) {
+    for (let i=0; i<n; i++) {
+      this.grid.shift();
+      const gapCol = Math.floor(Math.random()*COLS);
+      const row = Array(COLS).fill('#3a3a4a');
+      row[gapCol] = null;
+      this.grid.push(row);
+    }
+  }
+
+  updateHUD() {
+    if (!this.isLocal) return;
+    document.getElementById('localScore').innerText = this.score;
+    document.getElementById('localLevel').innerText = this.level;
+    document.getElementById('localLines').innerText = this.lines;
+  }
+
+  sendFullState() {
+    if (!this.isLocal) return;
+    this.updateHUD();
+    send({
+      type:'state',
+      grid: this.grid.map(row => row.map(c => c || null)),
+      piece: this.piece ? { m:this.piece.m, x:this.piece.x, y:this.piece.y, color:this.piece.color } : null,
+      hold: this.holdType,
+      next: this.nextType,
+      score: this.score,
+      level: this.level,
+      lines: this.lines,
+      gameOver: this.gameOver
+    });
+  }
+
+  tick(dt) {
+    if (this.gameOver || this.paused) return;
+    this.dropCounter += dt;
+    if (this.dropCounter > this.dropInterval) {
+      this.dropCounter = 0;
+      if (!this.collides(this.piece.m, this.piece.x, this.piece.y+1)) {
+        this.piece.y++;
+        this.sendFullState();
+      } else {
+        this.lock();
+      }
+    }
+  }
+
+  ghostY() {
+    let gy = this.piece.y;
+    while (!this.collides(this.piece.m, this.piece.x, gy+1)) gy++;
+    return gy;
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    ctx.clearRect(0,0,COLS*BLOCK, ROWS*BLOCK);
+    // grid background lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    for (let x=0; x<=COLS; x++) { ctx.beginPath(); ctx.moveTo(x*BLOCK,0); ctx.lineTo(x*BLOCK, ROWS*BLOCK); ctx.stroke(); }
+    for (let y=0; y<=ROWS; y++) { ctx.beginPath(); ctx.moveTo(0,y*BLOCK); ctx.lineTo(COLS*BLOCK, y*BLOCK); ctx.stroke(); }
+    // locked blocks
+    for (let r=0; r<ROWS; r++) {
+      for (let c=0; c<COLS; c++) {
+        if (this.grid[r][c]) drawBlock(ctx, c, r, this.grid[r][c]);
+      }
+    }
+    if (this.piece && !this.gameOver) {
+      // ghost
+      const gy = this.ghostY();
+      ctx.globalAlpha = 0.25;
+      forEachCell(this.piece.m, (r,c) => drawBlock(ctx, this.piece.x+c, gy+r, this.piece.color));
+      ctx.globalAlpha = 1;
+      // active piece
+      forEachCell(this.piece.m, (r,c) => drawBlock(ctx, this.piece.x+c, this.piece.y+r, this.piece.color));
+    }
+    // hold / next previews (local only, driven by own state)
+    if (this.isLocal) {
+      drawMini(this.holdCtx, this.holdType);
+      drawMini(this.nextCtx, this.nextType);
+    }
+  }
+}
+
+function forEachCell(m, fn) {
+  for (let r=0; r<m.length; r++) for (let c=0; c<m.length; c++) if (m[r][c]) fn(r,c);
+}
+
+function drawBlock(ctx, x, y, color) {
+  const px = x*BLOCK, py = y*BLOCK;
+  ctx.fillStyle = color;
+  ctx.fillRect(px+1, py+1, BLOCK-2, BLOCK-2);
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(px+1, py+1, BLOCK-2, BLOCK-2);
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillRect(px+2, py+2, BLOCK-4, 3);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(px+2, py+BLOCK-5, BLOCK-4, 3);
+}
+
+function drawMini(ctx, type) {
+  ctx.clearRect(0,0,60,60);
+  if (!type) return;
+  const shape = SHAPES[type];
+  const m = shape.m;
+  const size = m.length;
+  const bs = 14;
+  const offsetX = (60 - size*bs)/2, offsetY = (60 - size*bs)/2;
+  for (let r=0; r<size; r++) for (let c=0; c<size; c++) {
+    if (!m[r][c]) continue;
+    const px = offsetX + c*bs+1, py = offsetY + r*bs+1;
+    ctx.fillStyle = shape.color;
+    ctx.fillRect(px, py, bs-2, bs-2);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(px, py, bs-2, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(px, py+bs-4, bs-2, 2);
+  }
+}
+
+/* ============================= REMOTE (OPPONENT) DISPLAY ============================= */
+let remoteCtx, remoteHoldCtx, remoteNextCtx;
+
+function applyRemoteState(data) {
+  document.getElementById('remoteScore').innerText = data.score;
+  document.getElementById('remoteLevel').innerText = data.level;
+  document.getElementById('remoteLines').innerText = data.lines;
+
+  remoteCtx.clearRect(0,0,COLS*BLOCK, ROWS*BLOCK);
+  remoteCtx.strokeStyle = 'rgba(255,255,255,0.04)';
+  for (let x=0; x<=COLS; x++) { remoteCtx.beginPath(); remoteCtx.moveTo(x*BLOCK,0); remoteCtx.lineTo(x*BLOCK, ROWS*BLOCK); remoteCtx.stroke(); }
+  for (let y=0; y<=ROWS; y++) { remoteCtx.beginPath(); remoteCtx.moveTo(0,y*BLOCK); remoteCtx.lineTo(COLS*BLOCK, y*BLOCK); remoteCtx.stroke(); }
+
+  for (let r=0; r<ROWS; r++) for (let c=0; c<COLS; c++) {
+    if (data.grid[r][c]) drawBlock(remoteCtx, c, r, data.grid[r][c]);
+  }
+  if (data.piece && !data.gameOver) {
+    forEachCell(data.piece.m, (r,c) => drawBlock(remoteCtx, data.piece.x+c, data.piece.y+r, data.piece.color));
+  }
+  drawMini(remoteHoldCtx, data.hold);
+  drawMini(remoteNextCtx, data.next);
+
+  if (data.gameOver) {
+    document.getElementById('remoteStatus').innerText = 'DEFEATED';
+  } else {
+    document.getElementById('remoteStatus').innerText = '';
+  }
+}
+
+function onOpponentGameOver() {
+  document.getElementById('remoteStatus').innerText = 'DEFEATED';
+  if (game && !game.gameOver) {
+    showBanner('VICTORY!', 'win');
+  }
+}
+
+/* ============================= UI HELPERS ============================= */
+let localRematchReady = false;
+let remoteRematchReady = false;
+
+function showBanner(text, cls) {
+  localRematchReady = false;
+  remoteRematchReady = false;
+  const b = document.getElementById('banner');
+  b.innerHTML = '';
+  const title = document.createElement('div');
+  title.innerText = text;
+  b.className = cls;
+  b.style.display = 'block';
+  b.appendChild(title);
+
+  const status = document.createElement('div');
+  status.id = 'rematchStatus';
+  status.style.fontFamily = "'Cinzel', 'Palatino Linotype', Palatino, Georgia, serif";
+  status.style.fontSize = '0.35em';
+  status.style.letterSpacing = '2px';
+  status.style.marginTop = '12px';
+  status.style.color = 'var(--muted)';
+  b.appendChild(status);
+
+  const restartBtn = document.createElement('button');
+  restartBtn.id = 'rematchBtn';
+  restartBtn.innerText = 'Rematch';
+  restartBtn.style.marginTop = '16px';
+  restartBtn.style.width = 'auto';
+  restartBtn.onclick = () => {
+    if (localRematchReady) return;
+    localRematchReady = true;
+    send({ type: 'rematch' });
+    updateRematchUI();
+    tryStartRematch();
+  };
+  b.appendChild(document.createElement('br'));
+  b.appendChild(restartBtn);
+  updateRematchUI();
+}
+
+function updateRematchUI() {
+  const status = document.getElementById('rematchStatus');
+  const btn = document.getElementById('rematchBtn');
+  if (!status) return;
+  if (localRematchReady && remoteRematchReady) {
+    status.innerText = 'Both ready — commencing...';
+  } else if (localRematchReady) {
+    status.innerText = 'Waiting for opponent...';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = 'Ready';
+    }
+  } else if (remoteRematchReady) {
+    status.innerText = 'Opponent wants a rematch';
+  } else {
+    status.innerText = '';
+  }
+}
+
+function tryStartRematch() {
+  if (!localRematchReady || !remoteRematchReady || !game) return;
+  localRematchReady = false;
+  remoteRematchReady = false;
+  const b = document.getElementById('banner');
+  b.style.display = 'none';
+  b.innerHTML = '';
+  document.getElementById('remoteStatus').innerText = '';
+  game.reset(false);
+}
+
+function triggerShake() {
+  const el = document.querySelector('.you');
+  el.classList.remove('shake');
+  void el.offsetWidth;
+  el.classList.add('shake');
+}
+
+/* ============================= GAME LOOP ============================= */
+let game = null;
+let lastTime = 0;
+
+function startGame() {
+  const localCanvas = document.getElementById('localCanvas');
+  const localHold = document.getElementById('localHold');
+  const localNext = document.getElementById('localNext');
+  remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
+  remoteHoldCtx = document.getElementById('remoteHold').getContext('2d');
+  remoteNextCtx = document.getElementById('remoteNext').getContext('2d');
+
+  game = new Tetris(localCanvas, localHold, localNext, true);
+  gameStarted = true;
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
+function loop(time) {
+  const dt = time - lastTime;
+  lastTime = time;
+  if (game) {
+    game.tick(dt);
+    game.draw();
+  }
+  requestAnimationFrame(loop);
+}
+
+document.addEventListener('keydown', e => {
+  if (!gameStarted || !game || game.paused && e.key.toLowerCase() !== 'p') {
+    if (e.key.toLowerCase() === 'p' && game) { game.paused = !game.paused; }
+    return;
+  }
+  switch (e.key) {
+    case 'ArrowLeft': game.move(-1); e.preventDefault(); break;
+    case 'ArrowRight': game.move(1); e.preventDefault(); break;
+    case 'ArrowUp': game.rotate(); e.preventDefault(); break;
+    case 'ArrowDown': game.softDrop(); e.preventDefault(); break;
+    case ' ': game.hardDrop(); e.preventDefault(); break;
+    case 'c': case 'C': game.hold(); break;
+    case 'p': case 'P': game.paused = !game.paused; break;
+  }
+});
+</script>
+</body>
+</html>
