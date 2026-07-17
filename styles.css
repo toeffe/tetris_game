@@ -1,0 +1,257 @@
+@font-face{
+  font-family:'Cinzel';
+  font-style:normal;
+  font-weight:400 700;
+  font-display:swap;
+  src:url('./fonts/cinzel.woff2') format('woff2');
+}
+@font-face{
+  font-family:'Cinzel Decorative';
+  font-style:normal;
+  font-weight:700;
+  font-display:swap;
+  src:url('./fonts/cinzel-decorative.woff2') format('woff2');
+}
+
+:root{
+  --font-display:'Cinzel Decorative','Palatino Linotype',Palatino,Georgia,serif;
+  --font-body:'Cinzel','Palatino Linotype',Palatino,Georgia,serif;
+  --bg:#1a1510;
+  --gold:#c9a227;
+  --bronze:#8b6914;
+  --crimson:#8b1a1a;
+  --text:#f0e6d0;
+  --muted:#a89878;
+  --parchment:#e8d9b5;
+  --iron:#4a453f;
+}
+
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  min-height:100vh;
+  color:var(--text);
+  font-family:var(--font-body);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:20px 12px 120px;
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(180,90,20,.16), transparent 45%),
+    radial-gradient(ellipse at 80% 0%, rgba(180,90,20,.12), transparent 40%),
+    linear-gradient(180deg,#2c2418 0%,#1a1510 45%,#12100c 100%);
+}
+
+.title{
+  font-family:var(--font-display);
+  font-size:clamp(1.8rem,6vw,2.6rem);
+  letter-spacing:.2em;
+  margin:0;
+  color:var(--gold);
+  text-shadow:0 2px 0 #5c3d00,0 0 28px rgba(201,162,39,.3);
+}
+.subtitle{
+  margin:4px 0 20px;
+  color:var(--muted);
+  letter-spacing:.25em;
+  font-size:.75rem;
+  text-transform:uppercase;
+}
+
+.panel{
+  width:min(360px,100%);
+  padding:24px 20px;
+  background:linear-gradient(160deg,#6b4423,#3d2514);
+  border:3px solid var(--bronze);
+  outline:1px solid var(--gold);
+  outline-offset:-6px;
+  border-radius:6px;
+  box-shadow:0 16px 40px rgba(0,0,0,.5);
+}
+.panel button{margin-top:10px;}
+.panel button:first-child{margin-top:0;}
+
+button{
+  width:100%;
+  padding:12px 16px;
+  border:2px solid var(--gold);
+  border-radius:3px;
+  background:linear-gradient(180deg,#6b4e16,#4a350e);
+  color:var(--parchment);
+  font:700 .9rem var(--font-body);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,220,120,.2),0 3px 8px rgba(0,0,0,.35);
+}
+button:hover{
+  background:linear-gradient(180deg,var(--gold),#a8841a);
+  color:#1a1208;
+}
+button.secondary{
+  border-color:#a84848;
+  background:linear-gradient(180deg,#5c2020,#3d1212);
+  color:#f0c8c8;
+}
+button.secondary:hover{
+  background:linear-gradient(180deg,var(--crimson),#5c1010);
+  color:var(--parchment);
+}
+button:disabled{opacity:.45;cursor:not-allowed;}
+
+.room-code{
+  margin:8px 0 4px;
+  font-family:var(--font-display);
+  font-size:2.4rem;
+  letter-spacing:.35em;
+  color:var(--gold);
+  text-align:center;
+  text-shadow:0 1px 0 #3d2a00;
+}
+input#netIn{
+  width:100%;
+  margin-top:8px;
+  padding:14px 12px;
+  border:2px solid var(--iron);
+  border-radius:3px;
+  background:var(--parchment);
+  color:#2a1f12;
+  font:700 1.4rem var(--font-body);
+  letter-spacing:.35em;
+  text-align:center;
+  text-transform:uppercase;
+}
+input#netIn:focus{outline:none;border-color:var(--gold);}
+.hint{
+  margin:12px 0 0;
+  color:var(--muted);
+  font-size:.72rem;
+  line-height:1.6;
+  text-align:center;
+}
+
+#game{width:min(920px,100%);text-align:center;}
+.boards{
+  display:flex;
+  flex-wrap:wrap;
+  gap:20px;
+  justify-content:center;
+}
+.player{
+  padding:12px;
+  background:linear-gradient(180deg,rgba(92,61,34,.55),rgba(42,36,28,.75));
+  border:2px solid var(--bronze);
+  outline:1px solid rgba(201,162,39,.4);
+  outline-offset:-5px;
+  border-radius:4px;
+}
+.player h2{
+  margin:0 0 8px;
+  font-family:var(--font-display);
+  font-size:.9rem;
+  letter-spacing:.2em;
+  color:var(--gold);
+}
+#p2Box h2{color:#d4a0a0;}
+.row{display:flex;gap:8px;justify-content:center;align-items:flex-start;}
+canvas{
+  display:block;
+  background:#16120e;
+  border:2px solid var(--bronze);
+  max-width:100%;
+  touch-action:none;
+}
+#p1Box canvas{border-color:var(--gold);}
+#p2Box canvas{border-color:#a84848;}
+.side{width:72px;text-align:left;}
+.mini-label{
+  font-size:.6rem;
+  color:var(--muted);
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  margin-bottom:4px;
+}
+.score{
+  margin-top:10px;
+  font-size:1.35rem;
+  font-weight:700;
+  color:var(--gold);
+}
+.meta{margin-top:4px;font-size:.65rem;color:var(--muted);letter-spacing:.05em;}
+.over{margin-top:6px;min-height:1.1em;color:#e06060;font-weight:700;font-size:.8rem;letter-spacing:.08em;}
+
+#game > button{width:auto;min-width:160px;margin:10px 6px 0;}
+
+#banner{
+  position:fixed;
+  top:38%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  z-index:20;
+  padding:20px 36px;
+  font-family:var(--font-display);
+  font-size:clamp(1.6rem,5vw,2.4rem);
+  letter-spacing:.15em;
+  background:linear-gradient(160deg,rgba(61,42,26,.96),rgba(26,21,16,.96));
+  border:2px solid var(--gold);
+  border-radius:4px;
+  box-shadow:0 0 60px rgba(0,0,0,.7);
+}
+#banner.win{color:var(--gold);}
+#banner.lose{color:#e06060;border-color:var(--crimson);}
+.rematch-hint{
+  margin-top:12px;
+  font-family:var(--font-body);
+  font-size:.35em;
+  letter-spacing:.12em;
+  color:var(--muted);
+}
+
+.pads{
+  position:fixed;
+  left:0;right:0;bottom:0;
+  display:flex;
+  gap:8px;
+  justify-content:space-around;
+  padding:8px 8px calc(8px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg,transparent,rgba(18,16,12,.92) 30%);
+  z-index:10;
+  touch-action:none;
+  pointer-events:none;
+}
+.pad{
+  flex:1;
+  max-width:280px;
+  pointer-events:auto;
+}
+.pad-tag{
+  display:block;
+  text-align:center;
+  font-size:.65rem;
+  color:var(--muted);
+  letter-spacing:.15em;
+  margin-bottom:4px;
+}
+.pad-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:6px;
+}
+.pad-grid button{
+  min-height:44px;
+  padding:8px;
+  font-size:1rem;
+  letter-spacing:0;
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+@media (min-width:900px){
+  body{padding-bottom:40px;}
+  .pads{display:none;}
+}
+@media (max-width:700px){
+  .boards{flex-direction:column;align-items:center;}
+  canvas#c1,canvas#c2{width:160px;height:320px;}
+}
