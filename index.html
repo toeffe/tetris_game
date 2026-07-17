@@ -3,19 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>STONEFALL</title>
+<title>VibeTrisimo</title>
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
+  <div id="atmosphere" aria-hidden="true">
+    <div class="ember ember-a"></div>
+    <div class="ember ember-b"></div>
+    <div class="ember ember-c"></div>
+    <div class="vignette"></div>
+  </div>
+
   <div class="lang-bar" role="group" aria-label="Language">
     <button type="button" id="btnLangDa" class="lang-btn" data-lang="da">DA</button>
     <button type="button" id="btnLangEn" class="lang-btn" data-lang="en">EN</button>
   </div>
 
-  <h1 class="title">STONEFALL</h1>
+  <h1 class="title">VibeTrisimo</h1>
   <p class="subtitle" data-i18n="subtitle">Tetris battle</p>
 
   <div id="menu" class="panel">
+    <span class="panel-corners" aria-hidden="true"></span>
     <label class="field-label" for="menuName" data-i18n="yourName">Your name</label>
     <input id="menuName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" placeholder="Name">
     <button id="btnHost" data-i18n="hostGame">Host game</button>
@@ -24,6 +32,7 @@
   </div>
 
   <div id="netPanel" class="panel" hidden>
+    <span class="panel-corners" aria-hidden="true"></span>
     <p id="netLabel" class="hint"></p>
     <div id="roomCode" class="room-code" hidden>·····</div>
     <button id="btnCopy" type="button" hidden data-i18n="copyCode">Copy code</button>
@@ -34,6 +43,7 @@
   </div>
 
   <div id="lobby" class="panel" hidden>
+    <span class="panel-corners" aria-hidden="true"></span>
     <p class="hint" data-i18n="roomCode">Room code</p>
     <div id="lobbyCode" class="room-code">·····</div>
     <button id="btnCopyLobby" type="button" data-i18n="copyCode">Copy code</button>
@@ -60,6 +70,7 @@
           <button type="button" data-act="right">▶</button>
           <button type="button" data-act="soft">▼</button>
           <button type="button" data-act="hard">⬇</button>
+          <button type="button" data-act="hold" data-i18n="hold">Keep</button>
         </div>
       </div>
     </div>

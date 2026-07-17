@@ -1,17 +1,17 @@
-/* STONEFALL — host-relay lobby (max 8) */
+/* VibeTrisimo — host-relay lobby (max 8) */
 (() => {
   const COLS = 10, ROWS = 20;
-  const BLOCK_L = 20, BLOCK_S = 10;
   const MAX_PLAYERS = 8;
   const TYPES = ['I','O','T','S','Z','J','L'];
+  const GARBAGE_COLOR = '#4a453f';
   const SHAPES = {
-    I:{color:'#5ec8d4',m:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]]},
-    O:{color:'#e6c84a',m:[[1,1],[1,1]]},
-    T:{color:'#9b5fd4',m:[[0,1,0],[1,1,1],[0,0,0]]},
-    S:{color:'#4ecf7a',m:[[0,1,1],[1,1,0],[0,0,0]]},
-    Z:{color:'#d9445a',m:[[1,1,0],[0,1,1],[0,0,0]]},
-    J:{color:'#4a7fd4',m:[[1,0,0],[1,1,1],[0,0,0]]},
-    L:{color:'#e08a3c',m:[[0,0,1],[1,1,1],[0,0,0]]},
+    I:{color:'#5a9e9a',m:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]]},
+    O:{color:'#c9a227',m:[[1,1],[1,1]]},
+    T:{color:'#7a5a8a',m:[[0,1,0],[1,1,1],[0,0,0]]},
+    S:{color:'#4a7a4a',m:[[0,1,1],[1,1,0],[0,0,0]]},
+    Z:{color:'#8b2e2e',m:[[1,1,0],[0,1,1],[0,0,0]]},
+    J:{color:'#3a5a7a',m:[[1,0,0],[1,1,1],[0,0,0]]},
+    L:{color:'#b87333',m:[[0,0,1],[1,1,1],[0,0,0]]},
   };
   const GARBAGE = {1:0,2:1,3:2,4:4};
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -40,6 +40,7 @@
       youTag: ' (you)',
       waiting: 'Waiting',
       next: 'Next',
+      hold: 'Keep',
       meta: 'LV {lv} · {lines} lines',
       defaultName: 'Player',
       topOut: 'TOP OUT',
@@ -51,7 +52,7 @@
       needTwo: ' · need at least 2',
       waitReady: ' · waiting for ready',
       startingSoon: ' · starting…',
-      ctrlHint: 'WASD + space · last survivor wins · garbage hits everyone',
+      ctrlHint: 'WASD + space · C keep · last survivor wins · garbage hits everyone',
       rematchStart: 'Starting…',
       rematchWait: 'Waiting for others ({ready}/{n})…',
       rematchPartial: '{ready}/{n} ready',
@@ -93,6 +94,7 @@
       youTag: ' (dig)',
       waiting: 'Venter',
       next: 'Næste',
+      hold: 'Gem',
       meta: 'NIV {lv} · {lines} linjer',
       defaultName: 'Spiller',
       topOut: 'TOPPET UD',
@@ -104,7 +106,7 @@
       needTwo: ' · mindst 2 spillere',
       waitReady: ' · venter på klar',
       startingSoon: ' · starter…',
-      ctrlHint: 'WASD + mellemrum · sidste overlevende vinder · skrald rammer alle',
+      ctrlHint: 'WASD + mellemrum · C gem · sidste overlevende vinder · skrald rammer alle',
       rematchStart: 'Starter…',
       rematchWait: 'Venter på de andre ({ready}/{n})…',
       rematchPartial: '{ready}/{n} klar',
@@ -188,6 +190,7 @@
     }
     boards.forEach(b => {
       if (b.els && b.els.miniLabel) b.els.miniLabel.textContent = t('next');
+      if (b.els && b.els.holdLabel) b.els.holdLabel.textContent = t('hold');
       if (b.els && b.els.meta) {
         const lv = b.els.level ? b.els.level.textContent : '1';
         const ln = b.els.lines ? b.els.lines.textContent : '0';
@@ -243,7 +246,7 @@
   let boardById = new Map();
   let running = false, ended = false, eliminated = false;
   let matchPhase = 'idle'; // idle | lobby | playing | post
-  let last = 0, raf = 0;
+  let last = 0, raf = 0, logicTimer = 0;
   let peer = null, guestConn = null, roomCode = '';
   let myId = null;
   let roster = []; // {id, name, ready, alive}
@@ -267,12 +270,55 @@
     return bag.pop();
   }
 
-  function drawBlock(ctx, x, y, color, size) {
-    const px = x * size, py = y * size;
-    ctx.fillStyle = color;
-    ctx.fillRect(px + 1, py + 1, size - 2, size - 2);
-    ctx.fillStyle = 'rgba(255,255,255,.2)';
-    ctx.fillRect(px + 2, py + 2, Math.max(1, size - 4), Math.max(1, 2));
+  function hexToRgb(hex) {
+    const h = hex.replace('#', '');
+    const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+    return {r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255};
+  }
+
+  function shadeRgb(rgb, f) {
+    return `rgb(${Math.max(0, Math.min(255, (rgb.r * f) | 0))},${Math.max(0, Math.min(255, (rgb.g * f) | 0))},${Math.max(0, Math.min(255, (rgb.b * f) | 0))})`;
+  }
+
+  function grit(x, y) {
+    return ((x * 17 + y * 31) & 7) / 40;
+  }
+
+  function drawBlock(ctx, x, y, color, size, opts) {
+    const ghost = opts && opts.ghost;
+    const iron = color === GARBAGE_COLOR;
+    const gap = Math.max(1, (size * .08) | 0);
+    const px = x * size + gap, py = y * size + gap;
+    const w = size - gap * 2, h = size - gap * 2;
+    if (w < 2 || h < 2) return;
+    const rgb = hexToRgb(color);
+    const g = grit(x, y);
+    const face = ghost ? shadeRgb(rgb, .55 + g) : shadeRgb(rgb, .92 + g);
+    const hi = ghost ? 'rgba(220,200,160,.12)' : iron ? 'rgba(180,170,150,.18)' : 'rgba(255,235,180,.35)';
+    const lo = iron ? 'rgba(0,0,0,.45)' : 'rgba(0,0,0,.4)';
+
+    ctx.fillStyle = shadeRgb(rgb, .35);
+    ctx.fillRect(px, py, w, h);
+    ctx.fillStyle = face;
+    ctx.fillRect(px + 1, py + 1, Math.max(1, w - 2), Math.max(1, h - 2));
+
+    const bevel = Math.max(1, (size * .18) | 0);
+    ctx.fillStyle = hi;
+    ctx.fillRect(px + 1, py + 1, Math.max(1, w - 2), bevel);
+    ctx.fillRect(px + 1, py + 1, bevel, Math.max(1, h - 2));
+    ctx.fillStyle = lo;
+    ctx.fillRect(px + 1, py + h - bevel - 1, Math.max(1, w - 2), bevel);
+    ctx.fillRect(px + w - bevel - 1, py + 1, bevel, Math.max(1, h - 2));
+
+    if (!ghost && !iron && size >= 12) {
+      const chip = Math.max(2, (size * .2) | 0);
+      ctx.fillStyle = 'rgba(255,245,210,.45)';
+      ctx.fillRect(px + 2, py + 2, chip, Math.max(1, chip / 2 | 0));
+    }
+    if (iron) {
+      ctx.fillStyle = 'rgba(0,0,0,.2)';
+      ctx.fillRect(px + 2, py + (h / 2 | 0), Math.max(1, w - 4), 1);
+    }
   }
 
   function drawMini(ctx, type, size) {
@@ -280,17 +326,27 @@
     if (!type) return;
     const m = SHAPES[type].m, n = m.length, bs = Math.max(8, (size / n) | 0) - 2;
     const ox = (size - n * (bs + 2)) / 2, oy = (size - n * (bs + 2)) / 2;
+    const color = SHAPES[type].color;
     for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
       if (!m[r][c]) continue;
-      ctx.fillStyle = SHAPES[type].color;
-      ctx.fillRect(ox + c * (bs + 2), oy + r * (bs + 2), bs, bs);
+      const px = ox + c * (bs + 2), py = oy + r * (bs + 2);
+      const rgb = hexToRgb(color);
+      ctx.fillStyle = shadeRgb(rgb, .4);
+      ctx.fillRect(px, py, bs, bs);
+      ctx.fillStyle = shadeRgb(rgb, .95);
+      ctx.fillRect(px + 1, py + 1, Math.max(1, bs - 2), Math.max(1, bs - 2));
+      ctx.fillStyle = 'rgba(255,235,180,.3)';
+      ctx.fillRect(px + 1, py + 1, Math.max(1, bs - 2), Math.max(1, 2));
+      ctx.fillStyle = 'rgba(0,0,0,.35)';
+      ctx.fillRect(px + 1, py + bs - 3, Math.max(1, bs - 2), 2);
     }
   }
 
   class Board {
-    constructor({canvas, nextCanvas, els, live, block, playerId, nextSize}) {
+    constructor({canvas, nextCanvas, holdCanvas, els, live, block, playerId, nextSize}) {
       this.ctx = canvas.getContext('2d');
       this.nextCtx = nextCanvas.getContext('2d');
+      this.holdCtx = holdCanvas.getContext('2d');
       this.els = els;
       this.live = live;
       this.block = block;
@@ -303,6 +359,8 @@
       this.grid = Array.from({length: ROWS}, () => Array(COLS).fill(null));
       this.bag = [];
       this.next = bagPiece(this.bag);
+      this.holdType = null;
+      this.canHold = true;
       this.score = 0;
       this.lines = 0;
       this.level = 1;
@@ -310,6 +368,8 @@
       this.acc = 0;
       this.over = false;
       this.gQueue = 0;
+      this.flashUntil = 0;
+      this.flashKind = null;
       this.spawn();
       this.paintHud();
       if (this.els.over) this.els.over.textContent = '';
@@ -321,6 +381,7 @@
       const shape = SHAPES[type];
       const m = shape.m.map(r => r.slice());
       this.piece = {type, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: 0};
+      this.canHold = true;
       if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
         this.over = true;
         if (this.els.over) this.els.over.textContent = t('topOut');
@@ -340,6 +401,29 @@
 
     canPlay() {
       return this.live && !this.over && !ended && matchPhase === 'playing';
+    }
+
+    hold() {
+      if (!this.canPlay() || !this.canHold || !this.piece) return;
+      const curType = this.piece.type;
+      if (this.holdType === null) {
+        this.holdType = curType;
+        this.spawn();
+      } else {
+        const swap = this.holdType;
+        this.holdType = curType;
+        const shape = SHAPES[swap];
+        const m = shape.m.map(r => r.slice());
+        this.piece = {type: swap, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: 0};
+        if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
+          this.over = true;
+          if (this.els.over) this.els.over.textContent = t('topOut');
+          onTopOut(this);
+        }
+      }
+      this.canHold = false;
+      this.paintHud();
+      syncState(this, true);
     }
 
     move(dx) {
@@ -392,6 +476,8 @@
         const gx = x + c, gy = y + r;
         if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) this.grid[gy][gx] = color;
       }
+      this.flashUntil = performance.now() + 120;
+      this.flashKind = 'lock';
       const cleared = this.clearLines();
       if (cleared) {
         const base = [0, 100, 300, 500, 800][cleared] || 800;
@@ -402,6 +488,8 @@
         if (navigator.vibrate) navigator.vibrate(30);
         const g = GARBAGE[cleared] || 0;
         if (g) sendGarbage(this, g);
+        this.flashUntil = performance.now() + 200;
+        this.flashKind = 'clear';
       }
       if (this.gQueue) {
         this.applyGarbage(this.gQueue);
@@ -431,10 +519,12 @@
       for (let i = 0; i < n; i++) {
         this.grid.shift();
         const gap = (Math.random() * COLS) | 0;
-        const row = Array(COLS).fill('#3a3a4a');
+        const row = Array(COLS).fill(GARBAGE_COLOR);
         row[gap] = null;
         this.grid.push(row);
       }
+      this.flashUntil = performance.now() + 180;
+      this.flashKind = 'garbage';
     }
 
     tick(dt) {
@@ -459,31 +549,47 @@
       if (this.els.level) this.els.level.textContent = this.level;
       if (this.els.lines) this.els.lines.textContent = this.lines;
       drawMini(this.nextCtx, this.next, this.nextSize);
+      if (this.holdCtx) drawMini(this.holdCtx, this.holdType, this.nextSize);
     }
 
     draw() {
       const ctx = this.ctx, s = this.block;
-      ctx.clearRect(0, 0, COLS * s, ROWS * s);
-      ctx.strokeStyle = 'rgba(255,255,255,.04)';
+      const bw = COLS * s, bh = ROWS * s;
+      ctx.clearRect(0, 0, bw, bh);
+      ctx.fillStyle = 'rgba(8,6,5,.35)';
+      ctx.fillRect(0, 0, bw, bh);
+      ctx.strokeStyle = 'rgba(180,150,80,.07)';
+      ctx.lineWidth = 1;
       for (let x = 0; x <= COLS; x++) {
-        ctx.beginPath(); ctx.moveTo(x * s, 0); ctx.lineTo(x * s, ROWS * s); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x * s, 0); ctx.lineTo(x * s, bh); ctx.stroke();
       }
       for (let y = 0; y <= ROWS; y++) {
-        ctx.beginPath(); ctx.moveTo(0, y * s); ctx.lineTo(COLS * s, y * s); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, y * s); ctx.lineTo(bw, y * s); ctx.stroke();
       }
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
         if (this.grid[r][c]) drawBlock(ctx, c, r, this.grid[r][c], s);
       }
       if (this.piece && !this.over) {
         const gy = this.ghostY();
-        ctx.globalAlpha = .25;
+        ctx.globalAlpha = .35;
         for (let r = 0; r < this.piece.m.length; r++) for (let c = 0; c < this.piece.m.length; c++) {
-          if (this.piece.m[r][c]) drawBlock(ctx, this.piece.x + c, gy + r, this.piece.color, s);
+          if (this.piece.m[r][c]) drawBlock(ctx, this.piece.x + c, gy + r, this.piece.color, s, {ghost: true});
         }
         ctx.globalAlpha = 1;
         for (let r = 0; r < this.piece.m.length; r++) for (let c = 0; c < this.piece.m.length; c++) {
           if (this.piece.m[r][c]) drawBlock(ctx, this.piece.x + c, this.piece.y + r, this.piece.color, s);
         }
+      }
+      if (this.flashUntil && performance.now() < this.flashUntil) {
+        const fade = (this.flashUntil - performance.now()) / 200;
+        const a = Math.max(0, Math.min(.35, fade * .35));
+        if (this.flashKind === 'garbage') ctx.fillStyle = `rgba(120,40,30,${a})`;
+        else if (this.flashKind === 'clear') ctx.fillStyle = `rgba(212,175,55,${a})`;
+        else ctx.fillStyle = `rgba(240,220,160,${a * .7})`;
+        ctx.fillRect(0, 0, bw, bh);
+      } else {
+        this.flashUntil = 0;
+        this.flashKind = null;
       }
     }
 
@@ -492,8 +598,9 @@
         t: 'state',
         from: this.playerId,
         grid: this.grid,
-        piece: this.piece && {m: this.piece.m, x: this.piece.x, y: this.piece.y, color: this.piece.color},
+        piece: this.piece && {m: this.piece.m, x: this.piece.x, y: this.piece.y, color: this.piece.color, type: this.piece.type},
         next: this.next,
+        hold: this.holdType,
         score: this.score,
         level: this.level,
         lines: this.lines,
@@ -505,6 +612,7 @@
       this.grid = data.grid;
       this.piece = data.piece;
       this.next = data.next;
+      if ('hold' in data) this.holdType = data.hold;
       this.score = data.score;
       this.level = data.level;
       this.lines = data.lines;
@@ -522,12 +630,90 @@
     boards = [];
     boardById.clear();
     boardsEl.innerHTML = '';
+    boardsEl.classList.remove('multi');
   }
 
-  function createBoardSlot(playerId, label, live, large) {
-    const block = large ? BLOCK_L : BLOCK_S;
+  function computePlayfieldSizes(playerCount) {
+    const vv = window.visualViewport;
+    const vh = (vv && vv.height) || window.innerHeight;
+    const vw = (vv && vv.width) || window.innerWidth;
+    const desktop = window.matchMedia('(min-width:900px)').matches;
+    const narrow = vw < 700;
+    const padH = desktop ? 48 : (narrow ? 172 : 140);
+    const chromeH = desktop ? 148 : (narrow ? 112 : 132);
+    const availH = Math.max(180, vh - padH - chromeH);
+    const availW = Math.max(280, vw - (narrow ? 12 : 24));
+    const n = Math.max(1, playerCount | 0);
+    const oppCount = Math.max(0, n - 1);
+
+    if (oppCount === 0) {
+      const sideW = narrow ? 58 : 168;
+      const byH = (availH / ROWS) | 0;
+      const byW = ((availW - sideW) / COLS) | 0;
+      const local = Math.max(narrow ? 13 : 18, Math.min(narrow ? 26 : 36, byH, byW));
+      return {local, opp: 10, oppRows: 0, oppCols: 0, availH, availW, vh, vw};
+    }
+
+    // Opponents stay in a side column; local board is maximized first.
+    const oppRows = oppCount <= 2 ? 1 : 2;
+    const oppCols = Math.ceil(oppCount / oppRows);
+    const gap = 12;
+    const youChrome = 42;
+    const oppChrome = 34;
+    const youSide = narrow ? 52 : 150;
+    const oppSide = narrow || n >= 4 ? 48 : 100;
+
+    let maxLocal = narrow ? 28 : 38;
+    if (n >= 5) maxLocal = Math.min(maxLocal, narrow ? 24 : 32);
+    if (n >= 6) maxLocal = Math.min(maxLocal, narrow ? 22 : 28);
+    if (n >= 8) maxLocal = Math.min(maxLocal, narrow ? 18 : 24);
+
+    let maxOpp = narrow ? 11 : 13;
+    if (n >= 5) maxOpp = Math.min(maxOpp, 11);
+    if (n >= 6) maxOpp = Math.min(maxOpp, 10);
+    if (n >= 8) maxOpp = Math.min(maxOpp, 9);
+
+    let best = {local: narrow ? 16 : 20, opp: 8};
+    const minLocal = narrow ? 12 : 14;
+
+    for (let local = maxLocal; local >= minLocal; local--) {
+      const youH = local * ROWS + youChrome;
+      if (youH > availH) continue;
+      const youW = youSide + local * COLS;
+      const remW = availW - youW - gap;
+      if (remW < 90) continue;
+
+      for (let opp = Math.min(maxOpp, (local * .62) | 0); opp >= 7; opp--) {
+        const oppTileH = opp * ROWS + oppChrome;
+        const oppStackH = oppRows * oppTileH + (oppRows - 1) * gap;
+        if (oppStackH > availH) continue;
+        const oppsW = oppCols * (oppSide + opp * COLS) + (oppCols - 1) * gap;
+        if (oppsW > remW) continue;
+        best = {local, opp};
+        return {local: best.local, opp: best.opp, oppRows, oppCols, availH, availW, vh, vw, youSide, oppSide};
+      }
+    }
+
+    return {local: best.local, opp: best.opp, oppRows, oppCols, availH, availW, vh, vw, youSide, oppSide};
+  }
+
+  function computeBlockSize(large, playerCount) {
+    const sizes = computePlayfieldSizes(playerCount);
+    return large ? sizes.local : sizes.opp;
+  }
+
+  function setPlayLayout(on) {
+    document.body.classList.toggle('in-game', !!on);
+  }
+
+  function createBoardSlot(playerId, label, live, large, playerCount, parentEl) {
+    const n = Math.max(1, playerCount || roster.length || 1);
+    const block = computeBlockSize(!!large, n);
     const cw = COLS * block, ch = ROWS * block;
-    const nw = large ? 56 : 40;
+    const narrow = ((window.visualViewport && window.visualViewport.width) || window.innerWidth) < 700;
+    const nw = large
+      ? Math.max(narrow ? 44 : 64, Math.round(block * (narrow ? 2.2 : 2.8)))
+      : Math.max(narrow ? 28 : 36, Math.round(block * (narrow ? 2.6 : 3.2)));
     const box = document.createElement('div');
     box.className = 'player ' + (live ? 'you' : 'opp');
     box.dataset.id = playerId;
@@ -538,6 +724,18 @@
 
     const row = document.createElement('div');
     row.className = 'row';
+
+    const holdSide = document.createElement('div');
+    holdSide.className = 'side hold-side';
+    const holdLabel = document.createElement('div');
+    holdLabel.className = 'mini-label';
+    holdLabel.textContent = t('hold');
+    const hold = document.createElement('canvas');
+    hold.className = 'hold';
+    hold.width = nw;
+    hold.height = nw;
+    holdSide.append(holdLabel, hold);
+    row.appendChild(holdSide);
 
     const canvas = document.createElement('canvas');
     canvas.className = 'main';
@@ -564,10 +762,10 @@
     side.append(miniLabel, next, score, meta, over);
     row.appendChild(side);
     box.appendChild(row);
-    boardsEl.appendChild(box);
+    (parentEl || boardsEl).appendChild(box);
 
     const board = new Board({
-      canvas, nextCanvas: next,
+      canvas, nextCanvas: next, holdCanvas: hold,
       els: {
         score,
         level: meta.querySelector('.lv'),
@@ -575,6 +773,7 @@
         over,
         title,
         miniLabel,
+        holdLabel,
         meta,
       },
       live, block, playerId, nextSize: nw,
@@ -616,6 +815,7 @@
     hide(netPanel);
     hide(gameEl);
     hide(banner);
+    setPlayLayout(false);
     show(lobbyEl);
     matchPhase = 'lobby';
     $('lobbyCode').textContent = roomCode || '·····';
@@ -632,6 +832,7 @@
     matchPhase = 'idle';
     roster = [];
     clearBoards();
+    setPlayLayout(false);
     hide(gameEl);
     hide(netPanel);
     hide(lobbyEl);
@@ -656,23 +857,40 @@
     roster.forEach(p => { p.alive = true; p.ready = false; });
     last = performance.now();
     stopLoop();
-    raf = requestAnimationFrame(loop);
+    startLoop();
   }
 
   function stopLoop() {
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
+    if (logicTimer) clearInterval(logicTimer);
+    logicTimer = 0;
   }
 
-  function loop(t) {
-    const dt = t - last;
-    last = t;
-    if (running && matchPhase === 'playing' && !ended) {
-      tickHeldKeys(dt);
-      for (const b of boards) if (b.live) b.tick(dt);
-    }
+  function startLoop() {
+    stopLoop();
+    last = performance.now();
+    // Logic uses setInterval so gravity continues when the tab/window is unfocused
+    // (requestAnimationFrame is paused or heavily throttled in the background).
+    logicTimer = setInterval(logicTick, 1000 / 60);
+    raf = requestAnimationFrame(drawLoop);
+  }
+
+  function logicTick() {
+    const now = performance.now();
+    let dt = now - last;
+    last = now;
+    if (!running || matchPhase !== 'playing' || ended) return;
+    // Focused: clamp spikes. Hidden: allow larger dt so throttled timers still catch up.
+    const maxDt = document.hidden ? 2000 : 100;
+    dt = Math.min(Math.max(0, dt), maxDt);
+    if (!document.hidden) tickHeldKeys(dt);
+    for (const b of boards) if (b.live) b.tick(dt);
+  }
+
+  function drawLoop() {
     for (const b of boards) b.draw();
-    raf = requestAnimationFrame(loop);
+    raf = requestAnimationFrame(drawLoop);
   }
 
   function sendGarbage(from, n) {
@@ -750,6 +968,8 @@
     hint.className = 'rematch-hint';
     banner.appendChild(hint);
     banner.className = cls;
+    banner.hidden = true;
+    void banner.offsetWidth;
     show(banner);
   }
 
@@ -883,14 +1103,21 @@
     hide(lobbyEl);
     hide(netPanel);
     show(gameEl);
+    setPlayLayout(true);
     $('padTag0').textContent = getPlayerName();
     $('ctrlHint').textContent = t('ctrlHint');
     clearBoards();
-    players.forEach(p => {
-      createBoardSlot(p.id, p.name, p.id === myId, p.id === myId);
-    });
-    const you = boardsEl.querySelector('.player.you');
-    if (you) boardsEl.prepend(you);
+    const n = players.length;
+    const me = players.find(p => p.id === myId);
+    const others = players.filter(p => p.id !== myId);
+    if (me) createBoardSlot(me.id, me.name, true, true, n, boardsEl);
+    if (others.length) {
+      boardsEl.classList.add('multi');
+      const opps = document.createElement('div');
+      opps.className = 'opps';
+      boardsEl.appendChild(opps);
+      others.forEach(p => createBoardSlot(p.id, p.name, false, false, n, opps));
+    }
     roster = players.map(p => ({id: p.id, name: p.name, ready: false, alive: true}));
     beginMatch();
     const mine = boardById.get(myId);
@@ -1190,8 +1417,8 @@
   }
 
   /* ---------- input (DAS/ARR — no OS key-repeat lag) ---------- */
-  const DAS_MS = 100;
-  const ARR_MS = 25;
+  const DAS_MS = 160;
+  const ARR_MS = 50;
   const SOFT_MS = 40;
   const held = { left: false, right: false, soft: false };
   let shiftDir = 0; // -1 left, 1 right, 0 none
@@ -1271,6 +1498,7 @@
     else if (action === 'rot') b.rot();
     else if (action === 'soft') b.soft();
     else if (action === 'hard') b.hard();
+    else if (action === 'hold') b.hold();
   }
 
   document.addEventListener('keydown', e => {
@@ -1308,6 +1536,12 @@
     if (k === ' ') {
       if (e.repeat) { e.preventDefault(); return; }
       act('hard');
+      e.preventDefault();
+      return;
+    }
+    if (k === 'c' || k === 'C') {
+      if (e.repeat) { e.preventDefault(); return; }
+      act('hold');
       e.preventDefault();
     }
   });
