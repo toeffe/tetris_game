@@ -16,7 +16,6 @@
 :root{
   --font-display:'Cinzel Decorative','Palatino Linotype',Palatino,Georgia,serif;
   --font-body:'Cinzel','Palatino Linotype',Palatino,Georgia,serif;
-  --bg:#1a1510;
   --gold:#c9a227;
   --bronze:#8b6914;
   --crimson:#8b1a1a;
@@ -60,7 +59,7 @@ body{
 }
 
 .panel{
-  width:min(360px,100%);
+  width:min(380px,100%);
   padding:24px 20px;
   background:linear-gradient(160deg,#6b4423,#3d2514);
   border:3px solid var(--bronze);
@@ -70,7 +69,31 @@ body{
   box-shadow:0 16px 40px rgba(0,0,0,.5);
 }
 .panel button{margin-top:10px;}
-.panel button:first-child{margin-top:0;}
+.field-label{
+  display:block;
+  margin:0 0 4px;
+  color:var(--muted);
+  font-size:.7rem;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  text-align:center;
+}
+.name-input{
+  width:100%;
+  margin:0 0 8px;
+  padding:12px;
+  border:2px solid var(--iron);
+  border-radius:3px;
+  background:var(--parchment);
+  color:#2a1f12;
+  font:700 1rem var(--font-body);
+  letter-spacing:.08em;
+  text-align:center;
+}
+.name-input:focus{outline:none;border-color:var(--gold);}
+#menu .name-input{margin-bottom:14px;}
+#lobby .name-input{margin-top:12px;}
+#lobby .room-code{margin-top:0;}
 
 button{
   width:100%;
@@ -99,11 +122,15 @@ button.secondary:hover{
   color:var(--parchment);
 }
 button:disabled{opacity:.45;cursor:not-allowed;}
+button.ready-on{
+  background:linear-gradient(180deg,var(--gold),#a8841a);
+  color:#1a1208;
+}
 
 .room-code{
   margin:8px 0 4px;
   font-family:var(--font-display);
-  font-size:2.4rem;
+  font-size:2.2rem;
   letter-spacing:.35em;
   color:var(--gold);
   text-align:center;
@@ -131,30 +158,57 @@ input#netIn:focus{outline:none;border-color:var(--gold);}
   text-align:center;
 }
 
-#game{width:min(920px,100%);text-align:center;}
+.roster{
+  list-style:none;
+  margin:14px 0 0;
+  padding:0;
+  max-height:240px;
+  overflow:auto;
+}
+.roster li{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  margin-top:6px;
+  background:rgba(0,0,0,.25);
+  border:1px solid var(--bronze);
+  border-radius:3px;
+  font-size:.85rem;
+  letter-spacing:.06em;
+}
+.roster li .tag{color:var(--muted);font-size:.7rem;text-transform:uppercase;}
+.roster li.ready .tag{color:#8fd48a;}
+.roster li.me{outline:1px solid rgba(201,162,39,.5);}
+
+#game{width:min(1100px,100%);text-align:center;}
 .boards{
   display:flex;
   flex-wrap:wrap;
-  gap:20px;
+  gap:14px;
   justify-content:center;
+  align-items:flex-start;
 }
 .player{
-  padding:12px;
+  padding:10px;
   background:linear-gradient(180deg,rgba(92,61,34,.55),rgba(42,36,28,.75));
   border:2px solid var(--bronze);
-  outline:1px solid rgba(201,162,39,.4);
+  outline:1px solid rgba(201,162,39,.35);
   outline-offset:-5px;
   border-radius:4px;
 }
+.player.you{border-color:var(--gold);}
+.player.opp{border-color:#a84848;}
 .player h2{
-  margin:0 0 8px;
+  margin:0 0 6px;
   font-family:var(--font-display);
-  font-size:.9rem;
-  letter-spacing:.2em;
+  font-size:.8rem;
+  letter-spacing:.15em;
   color:var(--gold);
 }
-#p2Box h2{color:#d4a0a0;}
-.row{display:flex;gap:8px;justify-content:center;align-items:flex-start;}
+.player.opp h2{color:#d4a0a0;}
+.row{display:flex;gap:6px;justify-content:center;align-items:flex-start;}
 canvas{
   display:block;
   background:#16120e;
@@ -162,24 +216,27 @@ canvas{
   max-width:100%;
   touch-action:none;
 }
-#p1Box canvas{border-color:var(--gold);}
-#p2Box canvas{border-color:#a84848;}
-.side{width:72px;text-align:left;}
+.player.you canvas{border-color:var(--gold);}
+.player.opp canvas{border-color:#a84848;}
+.side{text-align:left;}
+.player.you .side{width:72px;}
+.player.opp .side{width:48px;}
 .mini-label{
-  font-size:.6rem;
+  font-size:.55rem;
   color:var(--muted);
   letter-spacing:.1em;
   text-transform:uppercase;
-  margin-bottom:4px;
+  margin-bottom:3px;
 }
 .score{
-  margin-top:10px;
-  font-size:1.35rem;
+  margin-top:8px;
+  font-size:1.2rem;
   font-weight:700;
   color:var(--gold);
 }
-.meta{margin-top:4px;font-size:.65rem;color:var(--muted);letter-spacing:.05em;}
-.over{margin-top:6px;min-height:1.1em;color:#e06060;font-weight:700;font-size:.8rem;letter-spacing:.08em;}
+.player.opp .score{font-size:.95rem;}
+.meta{margin-top:3px;font-size:.6rem;color:var(--muted);letter-spacing:.04em;}
+.over{margin-top:4px;min-height:1em;color:#e06060;font-weight:700;font-size:.7rem;letter-spacing:.06em;}
 
 #game > button{width:auto;min-width:160px;margin:10px 6px 0;}
 
@@ -197,6 +254,7 @@ canvas{
   border:2px solid var(--gold);
   border-radius:4px;
   box-shadow:0 0 60px rgba(0,0,0,.7);
+  text-align:center;
 }
 #banner.win{color:var(--gold);}
 #banner.lose{color:#e06060;border-color:var(--crimson);}
@@ -252,6 +310,5 @@ canvas{
   .pads{display:none;}
 }
 @media (max-width:700px){
-  .boards{flex-direction:column;align-items:center;}
-  canvas#c1,canvas#c2{width:160px;height:320px;}
+  .player.you canvas.main{width:160px;height:320px;}
 }
