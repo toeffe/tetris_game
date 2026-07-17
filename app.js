@@ -1,4 +1,4 @@
-/* STONEFALL — local 1v1 + host-relay lobby (max 8) */
+/* STONEFALL — host-relay lobby (max 8) */
 (() => {
   const COLS = 10, ROWS = 20;
   const BLOCK_L = 20, BLOCK_S = 10;
@@ -25,7 +25,7 @@
 
   function sanitizeName(raw) {
     const s = String(raw || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 12);
-    return s || 'Player';
+    return s || 'Spiller';
   }
 
   function getPlayerName() {
@@ -35,7 +35,7 @@
       const stored = localStorage.getItem(NAME_KEY);
       if (stored) return sanitizeName(stored);
     } catch (_) {}
-    return 'Player';
+    return 'Spiller';
   }
 
   function setPlayerName(raw) {
@@ -54,8 +54,8 @@
     }
   } catch (_) {}
 
-  let mode = null; // 'local' | 'host' | 'guest'
-  let boards = []; // Board instances (local: 2; remote: many)
+  let mode = null; // 'host' | 'guest'
+  let boards = [];
   let boardById = new Map();
   let running = false, ended = false, eliminated = false;
   let matchPhase = 'idle'; // idle | lobby | playing | post
@@ -64,7 +64,6 @@
   let myId = null;
   let roster = []; // {id, name, ready, alive}
   let connections = new Map(); // host: peerId -> DataConnection
-  let p1Ready = false, p2Ready = false;
   let syncAcc = 0;
 
   function rotate(m) {
@@ -140,7 +139,7 @@
       this.piece = {type, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: 0};
       if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
         this.over = true;
-        if (this.els.over) this.els.over.textContent = 'TOP OUT';
+        if (this.els.over) this.els.over.textContent = 'TOPPET UD';
         onTopOut(this);
       }
     }
@@ -327,7 +326,7 @@
       this.lines = data.lines;
       this.over = !!data.over;
       this.paintHud();
-      if (this.els.over) this.els.over.textContent = this.over ? 'TOP OUT' : '';
+      if (this.els.over) this.els.over.textContent = this.over ? 'TOPPET UD' : '';
     }
   }
 
@@ -366,7 +365,7 @@
     side.className = 'side';
     const miniLabel = document.createElement('div');
     miniLabel.className = 'mini-label';
-    miniLabel.textContent = 'Next';
+    miniLabel.textContent = 'Næste';
     const next = document.createElement('canvas');
     next.width = nw;
     next.height = nw;
@@ -375,7 +374,7 @@
     score.textContent = '0';
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.innerHTML = 'LV <span class="lv">1</span> · <span class="ln">0</span> lines';
+    meta.innerHTML = 'NIV <span class="lv">1</span> · <span class="ln">0</span> linjer';
     const over = document.createElement('div');
     over.className = 'over';
     side.append(miniLabel, next, score, meta, over);
@@ -406,23 +405,23 @@
       if (p.id === myId) li.classList.add('me');
       if (p.ready) li.classList.add('ready');
       const name = document.createElement('span');
-      name.textContent = p.name + (p.id === myId ? ' (you)' : '');
+      name.textContent = p.name + (p.id === myId ? ' (dig)' : '');
       const tag = document.createElement('span');
       tag.className = 'tag';
-      tag.textContent = p.ready ? 'Ready' : 'Waiting';
+      tag.textContent = p.ready ? 'Klar' : 'Venter';
       li.append(name, tag);
       rosterList.appendChild(li);
     });
     const n = roster.length;
     const readyN = roster.filter(p => p.ready).length;
-    let status = n + '/' + MAX_PLAYERS + ' · ' + readyN + ' ready';
-    if (n < 2) status += ' · need at least 2';
-    else if (readyN < n) status += ' · waiting for ready';
-    else status += ' · starting…';
+    let status = n + '/' + MAX_PLAYERS + ' · ' + readyN + ' klar';
+    if (n < 2) status += ' · mindst 2 spillere';
+    else if (readyN < n) status += ' · venter på klar';
+    else status += ' · starter…';
     $('lobbyStatus').textContent = status;
 
     const me = roster.find(p => p.id === myId);
-    btnReady.textContent = me?.ready ? 'Unready' : 'Ready';
+    btnReady.textContent = me?.ready ? 'Ikke klar' : 'Klar';
     btnReady.classList.toggle('ready-on', !!me?.ready);
   }
 
@@ -453,38 +452,20 @@
     hide(banner);
     hide(btnAgain);
     btnAgain.disabled = false;
-    btnAgain.textContent = 'Play again';
+    btnAgain.textContent = 'Spil igen';
     show(menu);
   }
 
-  /* ---------- local 1v1 ---------- */
-  function startLocal() {
-    mode = 'local';
-    myId = 'p1';
-    hide(menu);
-    hide(netPanel);
-    hide(lobbyEl);
-    show(gameEl);
-    clearBoards();
-    createBoardSlot('p1', 'P1', true, true);
-    createBoardSlot('p2', 'P2', true, true);
-    $('ctrlHint').textContent = 'P1: WASD + space · P2: arrows + Shift hard-drop';
-    show($('pad2'));
-    $('padTag0').textContent = 'P1';
-    beginMatch();
-  }
-
+  /* ---------- match lifecycle ---------- */
   function beginMatch() {
     ended = false;
     eliminated = false;
-    p1Ready = false;
-    p2Ready = false;
     matchPhase = 'playing';
     running = true;
     hide(banner);
     hide(btnAgain);
     btnAgain.disabled = false;
-    btnAgain.textContent = mode === 'local' ? 'P1 ready' : 'Play again';
+    btnAgain.textContent = 'Spil igen';
     roster.forEach(p => { p.alive = true; p.ready = false; });
     last = performance.now();
     stopLoop();
@@ -507,17 +488,11 @@
   }
 
   function sendGarbage(from, n) {
-    if (mode === 'local') {
-      for (const b of boards) {
-        if (b !== from && !b.over) b.addGarbage(n);
-      }
-      return;
-    }
     netSend({t: 'garbage', n, from: from.playerId});
   }
 
   function syncState(board, force) {
-    if (mode === 'local' || !board.live || matchPhase !== 'playing') return;
+    if (!board.live || matchPhase !== 'playing') return;
     if (!force) {
       syncAcc++;
       if (syncAcc < 3) return;
@@ -527,39 +502,23 @@
   }
 
   function onTopOut(board) {
-    if (mode === 'local') {
-      if (ended) return;
-      ended = true;
-      matchPhase = 'post';
-      p1Ready = false;
-      p2Ready = false;
-      const other = boards.find(b => b !== board);
-      const youWin = other && !other.over;
-      showBanner(youWin ? (board.playerId === 'p1' ? 'P2 WINS' : 'P1 WINS') : 'DRAW', youWin ? 'win' : 'lose');
-      btnAgain.textContent = 'P1 ready';
-      btnAgain.disabled = false;
-      show(btnAgain);
-      updateRematchHint();
-      return;
-    }
-
     if (!board.live || eliminated || ended) return;
     eliminated = true;
-    if (board.els.over) board.els.over.textContent = 'ELIMINATED';
+    if (board.els.over) board.els.over.textContent = 'ELIMINERET';
     markDead(board.playerId);
     netSend({t: 'over', from: board.playerId});
-    showBanner('ELIMINATED', 'lose');
+    showBanner('ELIMINERET', 'lose');
   }
 
   function markDead(id) {
     const p = roster.find(x => x.id === id);
     if (p) p.alive = false;
     const b = boardById.get(id);
-    if (b && b.els.over) b.els.over.textContent = 'TOP OUT';
+    if (b && b.els.over) b.els.over.textContent = 'TOPPET UD';
   }
 
   function checkWinner() {
-    if (mode === 'local' || ended) return;
+    if (ended) return;
     const alive = roster.filter(p => p.alive);
     if (alive.length > 1) return;
     ended = true;
@@ -569,7 +528,7 @@
       broadcastOrLocal({t: 'win', id: winner.id});
       applyWin(winner.id);
     } else {
-      showBanner('DRAW', 'lose');
+      showBanner('UAFGJORT', 'lose');
       showRematchBtn();
     }
   }
@@ -578,17 +537,17 @@
     ended = true;
     matchPhase = 'post';
     roster.forEach(p => { p.ready = false; });
-    if (winnerId === myId) showBanner('VICTORY', 'win');
+    if (winnerId === myId) showBanner('SEJR', 'win');
     else {
       const w = roster.find(p => p.id === winnerId);
-      showBanner((w?.name || 'Player') + ' WINS', 'lose');
+      showBanner((w?.name || 'Spiller') + ' VINDER', 'lose');
     }
     showRematchBtn();
     updateRematchHint();
   }
 
   function showRematchBtn() {
-    btnAgain.textContent = 'Play again';
+    btnAgain.textContent = 'Spil igen';
     btnAgain.disabled = false;
     show(btnAgain);
   }
@@ -609,51 +568,21 @@
   function updateRematchHint() {
     const hint = $('rematchHint');
     if (!hint) return;
-    if (mode === 'local') {
-      if (p1Ready && p2Ready) hint.textContent = 'Starting…';
-      else if (p1Ready) hint.textContent = 'Waiting for P2…';
-      else if (p2Ready) hint.textContent = 'Waiting for P1…';
-      else hint.textContent = 'Both players must ready up';
-      return;
-    }
     const readyN = roster.filter(p => p.ready).length;
     const n = roster.length;
-    if (n && readyN >= n) hint.textContent = 'Starting…';
-    else if (roster.find(p => p.id === myId)?.ready) hint.textContent = 'Waiting for others (' + readyN + '/' + n + ')…';
-    else if (readyN) hint.textContent = readyN + '/' + n + ' ready';
-    else hint.textContent = 'Everyone must click Play again';
+    if (n && readyN >= n) hint.textContent = 'Starter…';
+    else if (roster.find(p => p.id === myId)?.ready) hint.textContent = 'Venter på de andre (' + readyN + '/' + n + ')…';
+    else if (readyN) hint.textContent = readyN + '/' + n + ' klar';
+    else hint.textContent = 'Alle skal trykke på Spil igen';
   }
 
   function rematch() {
     if (matchPhase !== 'post' && !ended) return;
-    if (mode === 'local') {
-      if (!p1Ready) {
-        p1Ready = true;
-        btnAgain.textContent = 'P2 ready';
-        updateRematchHint();
-        if (p1Ready && p2Ready) {
-          boards.forEach(b => b.reset());
-          beginMatch();
-        }
-        return;
-      }
-      if (!p2Ready) {
-        p2Ready = true;
-        btnAgain.disabled = true;
-        btnAgain.textContent = 'Ready';
-        updateRematchHint();
-        if (p1Ready && p2Ready) {
-          boards.forEach(b => b.reset());
-          beginMatch();
-        }
-      }
-      return;
-    }
     const me = roster.find(p => p.id === myId);
     if (!me || me.ready) return;
     me.ready = true;
     btnAgain.disabled = true;
-    btnAgain.textContent = 'Ready';
+    btnAgain.textContent = 'Klar';
     netSend({t: 'rematch', from: myId});
     updateRematchHint();
     if (mode === 'host') {
@@ -766,33 +695,31 @@
     hide(lobbyEl);
     hide(netPanel);
     show(gameEl);
-    hide($('pad2'));
     $('padTag0').textContent = getPlayerName();
-    $('ctrlHint').textContent = 'WASD + space · last survivor wins · garbage hits everyone';
+    $('ctrlHint').textContent = 'WASD + mellemrum · sidste overlevende vinder · skrald rammer alle';
     clearBoards();
     players.forEach(p => {
       createBoardSlot(p.id, p.name, p.id === myId, p.id === myId);
     });
-    // put local board first visually
     const you = boardsEl.querySelector('.player.you');
     if (you) boardsEl.prepend(you);
     roster = players.map(p => ({id: p.id, name: p.name, ready: false, alive: true}));
     beginMatch();
-    const local = boardById.get(myId);
-    if (local) syncState(local, true);
+    const mine = boardById.get(myId);
+    if (mine) syncState(mine, true);
   }
 
   function onHostData(fromId, data) {
     if (!data || typeof data !== 'object') return;
     if (data.t === 'hello') {
       if (matchPhase !== 'lobby') {
-        sendTo(connections.get(fromId), {t: 'reject', reason: 'match already started'});
+        sendTo(connections.get(fromId), {t: 'reject', reason: 'kampen er allerede startet'});
         connections.get(fromId)?.close();
         connections.delete(fromId);
         return;
       }
       if (roster.length >= MAX_PLAYERS) {
-        sendTo(connections.get(fromId), {t: 'reject', reason: 'room full'});
+        sendTo(connections.get(fromId), {t: 'reject', reason: 'rummet er fuldt'});
         connections.get(fromId)?.close();
         connections.delete(fromId);
         return;
@@ -851,8 +778,8 @@
   function onGuestData(data) {
     if (!data || typeof data !== 'object') return;
     if (data.t === 'reject') {
-      $('netStatus').textContent = data.reason || 'Rejected';
-      $('lobbyStatus').textContent = data.reason || 'Rejected';
+      $('netStatus').textContent = data.reason || 'Afvist';
+      $('lobbyStatus').textContent = data.reason || 'Afvist';
       closeNet();
       hide(lobbyEl);
       show(netPanel);
@@ -925,7 +852,7 @@
   function wireGuestConn(c) {
     guestConn = c;
     const onOpen = () => {
-      $('netStatus').textContent = 'Joined lobby…';
+      $('netStatus').textContent = 'Tilsluttet lobby…';
       sendTo(c, {t: 'hello', name: getPlayerName()});
     };
     if (c.open) onOpen();
@@ -933,7 +860,7 @@
     c.on('data', onGuestData);
     c.on('close', () => {
       if (matchPhase !== 'idle') {
-        $('ctrlHint').textContent = 'Disconnected from host.';
+        $('ctrlHint').textContent = 'Forbindelsen til værten blev afbrudt.';
         if (matchPhase === 'lobby') {
           hide(lobbyEl);
           showMenu();
@@ -941,7 +868,7 @@
       }
     });
     c.on('error', () => {
-      $('netStatus').textContent = 'Connection error.';
+      $('netStatus').textContent = 'Forbindelsesfejl.';
       $('btnNetGo').disabled = false;
     });
   }
@@ -983,7 +910,7 @@
   }
 
   function showJoinUI() {
-    $('netLabel').textContent = 'Enter the 5-character room code.';
+    $('netLabel').textContent = 'Indtast rumkoden på 5 tegn.';
     hide($('roomCode'));
     hide($('btnCopy'));
     show($('netIn'));
@@ -1004,14 +931,14 @@
     peer.on('connection', c => {
       if (matchPhase !== 'lobby') {
         c.on('open', () => {
-          sendTo(c, {t: 'reject', reason: 'match already started'});
+          sendTo(c, {t: 'reject', reason: 'kampen er allerede startet'});
           c.close();
         });
         return;
       }
       if (roster.length >= MAX_PLAYERS) {
         c.on('open', () => {
-          sendTo(c, {t: 'reject', reason: 'room full'});
+          sendTo(c, {t: 'reject', reason: 'rummet er fuldt'});
           c.close();
         });
         return;
@@ -1025,13 +952,13 @@
       }
       hide(lobbyEl);
       show(netPanel);
-      $('netStatus').textContent = 'Could not create room (' + (err.type || 'error') + ').';
-      show($('btnCopy')); // noop visibility
+      $('netStatus').textContent = 'Kunne ikke oprette rum (' + (err.type || 'fejl') + ').';
+      show($('btnCopy'));
       hide($('netIn'));
       hide($('btnNetGo'));
       hide($('roomCode'));
       hide($('btnCopy'));
-      $('netLabel').textContent = 'Host failed.';
+      $('netLabel').textContent = 'Kunne ikke oprette som vært.';
     });
   }
 
@@ -1039,7 +966,7 @@
     setPlayerName(menuName.value || lobbyName.value || getPlayerName());
     const code = ($('netIn').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (code.length !== 5) {
-      $('netStatus').textContent = 'Need a 5-character code.';
+      $('netStatus').textContent = 'Brug en kode på 5 tegn.';
       return;
     }
     closeNet();
@@ -1047,7 +974,7 @@
     matchPhase = 'lobby';
     roomCode = code;
     $('btnNetGo').disabled = true;
-    $('netStatus').textContent = 'Connecting…';
+    $('netStatus').textContent = 'Forbinder…';
     peer = new Peer();
     peer.on('open', () => {
       myId = peer.id;
@@ -1055,7 +982,7 @@
     });
     peer.on('error', err => {
       $('btnNetGo').disabled = false;
-      $('netStatus').textContent = 'Join failed (' + (err.type || 'error') + ').';
+      $('netStatus').textContent = 'Tilslutning mislykkedes (' + (err.type || 'fejl') + ').';
     });
   }
 
@@ -1075,14 +1002,9 @@
   }
 
   /* ---------- input ---------- */
-  function localBoards() {
-    return boards.filter(b => b.live);
-  }
-
-  function act(who, action) {
-    if (matchPhase !== 'playing' || ended) return;
-    const live = localBoards();
-    const b = live[who];
+  function act(action) {
+    if (matchPhase !== 'playing' || ended || eliminated) return;
+    const b = boards.find(x => x.live);
     if (!b) return;
     if (action === 'left') b.move(-1);
     else if (action === 'right') b.move(1);
@@ -1092,37 +1014,25 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (matchPhase !== 'playing' || ended) return;
-    // eliminated remote players don't control
-    if (mode !== 'local' && eliminated) return;
+    if (matchPhase !== 'playing' || ended || eliminated) return;
     const k = e.key;
-    const p1 = {a:'left', A:'left', d:'right', D:'right', w:'rot', W:'rot', s:'soft', S:'soft', ' ':'hard'};
-    if (p1[k]) {
-      act(0, p1[k]);
+    const map = {a:'left', A:'left', d:'right', D:'right', w:'rot', W:'rot', s:'soft', S:'soft', ' ':'hard'};
+    if (map[k]) {
+      act(map[k]);
       e.preventDefault();
-      return;
-    }
-    if (mode === 'local') {
-      const p2 = {ArrowLeft:'left', ArrowRight:'right', ArrowUp:'rot', ArrowDown:'soft'};
-      if (p2[k]) { act(1, p2[k]); e.preventDefault(); }
-      else if (k === 'Shift') { act(1, 'hard'); e.preventDefault(); }
     }
   });
 
-  document.querySelectorAll('.pad').forEach(pad => {
-    const who = +pad.dataset.who;
-    pad.querySelectorAll('button[data-act]').forEach(btn => {
-      const fire = ev => {
-        ev.preventDefault();
-        act(who, btn.dataset.act);
-      };
-      btn.addEventListener('pointerdown', fire);
-      btn.addEventListener('click', ev => ev.preventDefault());
-    });
+  document.querySelectorAll('.pad button[data-act]').forEach(btn => {
+    const fire = ev => {
+      ev.preventDefault();
+      act(btn.dataset.act);
+    };
+    btn.addEventListener('pointerdown', fire);
+    btn.addEventListener('click', ev => ev.preventDefault());
   });
 
   /* ---------- wiring ---------- */
-  $('btnLocal').onclick = startLocal;
   $('btnHost').onclick = () => openNetUI('host');
   $('btnJoin').onclick = () => openNetUI('guest');
   $('btnNetBack').onclick = showMenu;
@@ -1150,10 +1060,10 @@
   async function copyCode() {
     try {
       await navigator.clipboard.writeText(roomCode || $('lobbyCode').textContent);
-      $('lobbyStatus').textContent = 'Code copied.';
-      if (!$('netPanel').hidden) $('netStatus').textContent = 'Code copied.';
+      $('lobbyStatus').textContent = 'Kode kopieret.';
+      if (!$('netPanel').hidden) $('netStatus').textContent = 'Kode kopieret.';
     } catch (_) {
-      $('lobbyStatus').textContent = 'Copy failed — share manually.';
+      $('lobbyStatus').textContent = 'Kopiering mislykkedes — del koden manuelt.';
     }
   }
   $('btnCopy').onclick = copyCode;
