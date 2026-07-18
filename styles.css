@@ -659,6 +659,14 @@ canvas{
 }
 @media (max-width:700px){
   body.in-game{padding:4px 4px 168px;}
+  /* Fixed top-right positioning collides with the centered title on narrow
+     screens; flow it above the title instead while not in a match. */
+  .lang-bar{
+    position:static;
+    top:auto;
+    right:auto;
+    margin:0 0 10px;
+  }
   body.in-game .lang-bar{display:none;}
   .player{padding:4px;}
   .player h2{font-size:.65rem;margin-bottom:3px;letter-spacing:.1em;}
