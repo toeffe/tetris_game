@@ -654,6 +654,49 @@
       return {local, opp: 10, oppRows: 0, oppCols: 0, availH, availW, vh, vw};
     }
 
+    if (narrow) {
+      // Phones: stack the local board on top and wrap opponents in a row below.
+      const gap = 10;
+      const youChrome = 42;
+      const oppChrome = 30;
+      const youSide = 52;
+      const oppSide = 40;
+
+      let maxLocal = 26;
+      if (n >= 5) maxLocal = 22;
+      if (n >= 6) maxLocal = 20;
+      if (n >= 8) maxLocal = 18;
+      const minLocal = 12;
+      maxLocal = Math.max(minLocal, Math.min(maxLocal, ((availW - youSide) / COLS) | 0));
+
+      let maxOpp = 11;
+      if (n >= 5) maxOpp = 10;
+      if (n >= 6) maxOpp = 9;
+      if (n >= 8) maxOpp = 8;
+      const minOpp = 7;
+      maxOpp = Math.max(minOpp, Math.min(maxOpp, ((availW - oppSide) / COLS) | 0));
+
+      let best = {local: minLocal, opp: minOpp, oppRows: oppCount, oppCols: 1};
+
+      for (let local = maxLocal; local >= minLocal; local--) {
+        const youH = local * ROWS + youChrome;
+        const remH = availH - youH - gap;
+        if (remH < oppChrome + ROWS * minOpp) continue;
+
+        for (let opp = maxOpp; opp >= minOpp; opp--) {
+          const oppTileW = oppSide + opp * COLS;
+          const oppCols = Math.max(1, Math.min(oppCount, ((availW + gap) / (oppTileW + gap)) | 0));
+          const oppRows = Math.ceil(oppCount / oppCols);
+          const oppTileH = opp * ROWS + oppChrome;
+          const oppsH = oppRows * oppTileH + (oppRows - 1) * gap;
+          if (oppsH > remH) continue;
+          return {local, opp, oppRows, oppCols, availH, availW, vh, vw, youSide, oppSide};
+        }
+      }
+
+      return {local: best.local, opp: best.opp, oppRows: best.oppRows, oppCols: best.oppCols, availH, availW, vh, vw, youSide, oppSide};
+    }
+
     // Opponents stay in a side column; local board is maximized first.
     const oppRows = oppCount <= 2 ? 1 : 2;
     const oppCols = Math.ceil(oppCount / oppRows);
@@ -735,7 +778,6 @@
     hold.width = nw;
     hold.height = nw;
     holdSide.append(holdLabel, hold);
-    row.appendChild(holdSide);
 
     const canvas = document.createElement('canvas');
     canvas.className = 'main';
@@ -760,7 +802,14 @@
     const over = document.createElement('div');
     over.className = 'over';
     side.append(miniLabel, next, score, meta, over);
-    row.appendChild(side);
+
+    // Grouped so Keep + Next can be laid out as a single stacked unit on
+    // narrow screens; `display:contents` keeps them independent flex items
+    // (in original left/right positions) on wider layouts.
+    const hud = document.createElement('div');
+    hud.className = 'hud';
+    hud.append(holdSide, side);
+    row.appendChild(hud);
     box.appendChild(row);
     (parentEl || boardsEl).appendChild(box);
 

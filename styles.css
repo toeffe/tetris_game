@@ -527,7 +527,11 @@ canvas{
 .player.you canvas{border-color:var(--gold);}
 .player.opp canvas{border-color:var(--blood);}
 .side{text-align:left;}
-.hold-side{text-align:center;}
+.hold-side{text-align:center;order:-1;}
+/* Keep+Next are grouped in the DOM (after canvas.main) so they can become
+   one stacked column on narrow screens; on wider layouts the group is
+   transparent so Keep still sits to the left of the board via order:-1. */
+.hud{display:contents;}
 .player.you .side{width:auto;min-width:72px;}
 .player.you .hold-side{width:auto;min-width:72px;}
 .player.opp .side{width:auto;min-width:48px;}
@@ -655,31 +659,32 @@ canvas{
 }
 @media (max-width:700px){
   body.in-game{padding:4px 4px 168px;}
+  body.in-game .lang-bar{display:none;}
   .player{padding:4px;}
   .player h2{font-size:.65rem;margin-bottom:3px;letter-spacing:.1em;}
   .boards{gap:8px;}
+  .boards.multi{flex-wrap:wrap;justify-content:center;}
+  .boards.multi .opps{width:100%;justify-content:center;}
+  .player canvas.main{max-width:100%;height:auto;}
   .row{gap:4px;}
   /* Stack Keep + Next in one column so the board can use almost full width */
   .player.you .row{
-    display:grid;
-    grid-template-columns:minmax(0,auto) auto;
-    grid-template-rows:auto auto;
-    align-items:start;
+    align-items:flex-start;
     justify-content:center;
   }
   .player.you canvas.main{
-    grid-column:1;
-    grid-row:1 / span 2;
-  }
-  .player.you .hold-side{
-    grid-column:2;
-    grid-row:1;
+    flex:1 1 auto;
     min-width:0;
-    width:auto;
   }
+  .player.you .hud{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    flex:0 0 auto;
+    min-width:0;
+  }
+  .player.you .hold-side,
   .player.you .side{
-    grid-column:2;
-    grid-row:2;
     min-width:0;
     width:auto;
   }
@@ -688,7 +693,7 @@ canvas{
   /* Opponents: drop Keep column; keep Next only */
   .player.opp .hold-side{display:none;}
   .player.opp .side{min-width:0;}
-  .player.opp canvas.main{max-width:42vw;}
+  .player.opp canvas.main{max-width:100%;}
   body.in-game #game > .hint{display:none;}
   body.in-game #game > button{
     margin-top:6px;
