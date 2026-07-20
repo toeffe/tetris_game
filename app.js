@@ -1211,7 +1211,7 @@
   function tryHostStart() {
     if (mode !== 'host') return;
     if (matchPhase !== 'lobby' && matchPhase !== 'post') return;
-    if (roster.length < 2) return;
+    if (roster.length < 1) return;
     if (!roster.every(p => p.ready)) return;
     const ids = roster.map(p => p.id);
     broadcast({t: 'start', speedRamp: timeRampEnabled, players: ids.map(id => {
