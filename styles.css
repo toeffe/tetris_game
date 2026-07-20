@@ -721,3 +721,19 @@ canvas{
   #banner:not([hidden]){animation:none;opacity:1;transform:translate(-50%,-50%) scale(1);}
   .title{-webkit-text-fill-color:var(--gold);background:none;color:var(--gold);}
 }
+
+.toggle-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:.85rem;
+  color:var(--gold, #c9a227);
+  margin:6px 0;
+  cursor:pointer;
+}
+.toggle-row input[type="checkbox"]{
+  width:16px;
+  height:16px;
+  accent-color:var(--gold, #c9a227);
+  cursor:pointer;
+}
