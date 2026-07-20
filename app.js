@@ -14,6 +14,8 @@
     L:{color:'#b87333',m:[[0,0,1],[1,1,1],[0,0,0]]},
   };
   const GARBAGE = {1:0,2:1,3:2,4:4};
+  const TIME_LEVEL_MS = 30000; // level up every 30s of play, in addition to line-based leveling
+  const MIN_DROP_MS = 120; // fastest possible drop interval, so it never becomes unplayable
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const NAME_KEY = 'stonefall-name';
   const LANG_KEY = 'stonefall-lang';
@@ -392,6 +394,7 @@
       this.lines = 0;
       this.level = 1;
       this.dropMs = 1000;
+      this.elapsed = 0;
       this.acc = 0;
       this.over = false;
       this.gQueue = 0;
@@ -510,8 +513,7 @@
         const base = [0, 100, 300, 500, 800][cleared] || 800;
         this.score += base * this.level;
         this.lines += cleared;
-        this.level = 1 + ((this.lines / 10) | 0);
-        this.dropMs = Math.max(120, 1000 - (this.level - 1) * 75);
+        this.updateSpeed();
         if (navigator.vibrate) navigator.vibrate(30);
         const g = GARBAGE[cleared] || 0;
         if (g) sendGarbage(this, g);
@@ -556,6 +558,8 @@
 
     tick(dt) {
       if (!this.canPlay()) return;
+      this.elapsed += dt;
+      if (this.updateSpeed()) this.paintHud();
       this.acc += dt;
       if (this.acc < this.dropMs) return;
       this.acc = 0;
@@ -563,6 +567,16 @@
         this.piece.y++;
         syncState(this);
       } else this.lock();
+    }
+
+    updateSpeed() {
+      const lineLevel = 1 + ((this.lines / 10) | 0);
+      const timeLevel = 1 + ((this.elapsed / TIME_LEVEL_MS) | 0);
+      const level = Math.max(lineLevel, timeLevel);
+      const changed = level !== this.level;
+      this.level = level;
+      this.dropMs = Math.max(MIN_DROP_MS, 1000 - (level - 1) * 75);
+      return changed;
     }
 
     ghostY() {
@@ -1187,7 +1201,7 @@
   function tryHostStart() {
     if (mode !== 'host') return;
     if (matchPhase !== 'lobby' && matchPhase !== 'post') return;
-    if (roster.length < 1) return;
+    if (roster.length < 2) return;
     if (!roster.every(p => p.ready)) return;
     const ids = roster.map(p => p.id);
     broadcast({t: 'start', players: ids.map(id => {
