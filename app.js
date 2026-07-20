@@ -1015,6 +1015,18 @@
     }
   }
 
+  function checkSelfWin() {
+    // Safety net: if the authoritative 'win' packet from host is lost or
+    // arrives out of order, a client can still notice it's the last one
+    // standing from the 'over' broadcasts it already received, and declare
+    // its own win rather than sitting stuck in a 'playing' match forever.
+    if (ended || matchPhase !== 'playing') return;
+    const alive = roster.filter(p => p.alive);
+    if (alive.length === 1 && alive[0].id === myId) {
+      applyWin(myId);
+    }
+  }
+
   function applyWin(winnerId) {
     ended = true;
     matchPhase = 'post';
@@ -1132,18 +1144,31 @@
     }
   }
 
-  function fanoutGarbage(fromId, n) {
-    // apply to host local board if not sender and alive
-    const local = boardById.get(myId);
-    if (fromId !== myId && local && !local.over && matchPhase === 'playing') {
-      local.addGarbage(n);
+  function nextAliveTargetId(fromId) {
+    const ids = roster.map(p => p.id);
+    const n = ids.length;
+    if (!n) return null;
+    const idx = ids.indexOf(fromId);
+    if (idx === -1) return null;
+    for (let i = 1; i <= n; i++) {
+      const cand = ids[(idx + i) % n];
+      if (cand === fromId) continue;
+      const p = roster.find(x => x.id === cand);
+      if (p && p.alive !== false) return cand;
     }
-    connections.forEach((c, id) => {
-      if (id === fromId) return;
-      const p = roster.find(x => x.id === id);
-      if (p && p.alive === false) return;
-      sendTo(c, {t: 'garbage', n, from: fromId});
-    });
+    return null;
+  }
+
+  function fanoutGarbage(fromId, n) {
+    const targetId = nextAliveTargetId(fromId);
+    if (!targetId) return;
+    if (targetId === myId) {
+      const local = boardById.get(myId);
+      if (local && !local.over && matchPhase === 'playing') local.addGarbage(n);
+      return;
+    }
+    const c = connections.get(targetId);
+    if (c) sendTo(c, {t: 'garbage', n, from: fromId});
   }
 
   function handleOver(fromId) {
@@ -1311,6 +1336,7 @@
     }
     if (data.t === 'over') {
       markDead(data.from);
+      checkSelfWin();
       return;
     }
     if (data.t === 'win') {
