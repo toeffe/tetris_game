@@ -247,6 +247,33 @@
   let running = false, ended = false, eliminated = false;
   let matchPhase = 'idle'; // idle | lobby | playing | post
   let last = 0, raf = 0, logicTimer = 0;
+  const PEER_CONFIG = {
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.relay.metered.ca:80' },
+        {
+          urls: 'turn:global.relay.metered.ca:80',
+          username: 'c126c315864381c08f01dc50',
+          credential: 'c1geS6CRUugpkwb7'
+        },
+        {
+          urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+          username: 'c126c315864381c08f01dc50',
+          credential: 'c1geS6CRUugpkwb7'
+        },
+        {
+          urls: 'turn:global.relay.metered.ca:443',
+          username: 'c126c315864381c08f01dc50',
+          credential: 'c1geS6CRUugpkwb7'
+        },
+        {
+          urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+          username: 'c126c315864381c08f01dc50',
+          credential: 'c1geS6CRUugpkwb7'
+        }
+      ]
+    }
+  };
   let peer = null, guestConn = null, roomCode = '';
   let myId = null;
   let roster = []; // {id, name, ready, alive}
@@ -1390,7 +1417,7 @@
     matchPhase = 'lobby';
     const code = makeCode();
     roomCode = code;
-    peer = new Peer(code);
+    peer = new Peer(code, PEER_CONFIG);
     peer.on('open', id => showHostUI(id));
     peer.on('connection', c => {
       if (matchPhase !== 'lobby') {
@@ -1439,7 +1466,7 @@
     roomCode = code;
     $('btnNetGo').disabled = true;
     $('netStatus').textContent = t('connecting');
-    peer = new Peer();
+    peer = new Peer(undefined, PEER_CONFIG);
     peer.on('open', () => {
       myId = peer.id;
       wireGuestConn(peer.connect(code, {reliable: true}));
