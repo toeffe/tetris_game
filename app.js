@@ -255,26 +255,16 @@
   const PEER_CONFIG = {
     config: {
       iceServers: [
-        { urls: 'stun:stun.relay.metered.ca:80' },
+        { urls: 'stun:92.5.51.80:3478' },
         {
-          urls: 'turn:global.relay.metered.ca:80',
-          username: 'c126c315864381c08f01dc50',
-          credential: 'c1geS6CRUugpkwb7'
+          urls: 'turn:92.5.51.80:3478',
+          username: 'tetris',
+          credential: "'3IwrF5?%'t3'"
         },
         {
-          urls: 'turn:global.relay.metered.ca:80?transport=tcp',
-          username: 'c126c315864381c08f01dc50',
-          credential: 'c1geS6CRUugpkwb7'
-        },
-        {
-          urls: 'turn:global.relay.metered.ca:443',
-          username: 'c126c315864381c08f01dc50',
-          credential: 'c1geS6CRUugpkwb7'
-        },
-        {
-          urls: 'turns:global.relay.metered.ca:443?transport=tcp',
-          username: 'c126c315864381c08f01dc50',
-          credential: 'c1geS6CRUugpkwb7'
+          urls: 'turn:92.5.51.80:3478?transport=tcp',
+          username: 'tetris',
+          credential: "'3IwrF5?%'t3'"
         }
       ]
     }
@@ -1211,7 +1201,7 @@
   function tryHostStart() {
     if (mode !== 'host') return;
     if (matchPhase !== 'lobby' && matchPhase !== 'post') return;
-    if (roster.length < 1) return;
+    if (roster.length < 2) return;
     if (!roster.every(p => p.ready)) return;
     const ids = roster.map(p => p.id);
     broadcast({t: 'start', speedRamp: timeRampEnabled, players: ids.map(id => {
