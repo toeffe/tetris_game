@@ -52,7 +52,7 @@
       draw: 'DRAW',
       wins: '{name} WINS',
       rosterStatus: '{n}/{max} · {ready} ready',
-      needTwo: ' · need at least 2',
+      needTwo: ' · need at least 1',
       waitReady: ' · waiting for ready',
       startingSoon: ' · starting…',
       ctrlHint: 'WASD + space · C keep · last survivor wins · garbage hits everyone',
@@ -107,7 +107,7 @@
       draw: 'UAFGJORT',
       wins: '{name} VINDER',
       rosterStatus: '{n}/{max} · {ready} klar',
-      needTwo: ' · mindst 2 spillere',
+      needTwo: ' · mindst 1 spiller',
       waitReady: ' · venter på klar',
       startingSoon: ' · starter…',
       ctrlHint: 'WASD + mellemrum · C gem · sidste overlevende vinder · skrald rammer alle',
@@ -884,7 +884,7 @@
     const n = roster.length;
     const readyN = roster.filter(p => p.ready).length;
     let status = t('rosterStatus', {n, max: MAX_PLAYERS, ready: readyN});
-    if (n < 2) status += t('needTwo');
+    if (n < 1) status += t('needTwo');
     else if (readyN < n) status += t('waitReady');
     else status += t('startingSoon');
     $('lobbyStatus').textContent = status;
