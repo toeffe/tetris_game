@@ -35,6 +35,7 @@
       roomCode: 'Room code',
       ready: 'Ready',
       unready: 'Unready',
+      speedRamp: 'Speed increases over time',
       leave: 'Leave',
       playAgain: 'Play again',
       menu: 'Menu',
@@ -89,6 +90,7 @@
       roomCode: 'Rumkode',
       ready: 'Klar',
       unready: 'Ikke klar',
+      speedRamp: 'Hastighed øges over tid',
       leave: 'Forlad',
       playAgain: 'Spil igen',
       menu: 'Menu',
@@ -210,6 +212,7 @@
   const menu = $('menu'), netPanel = $('netPanel'), lobbyEl = $('lobby'), gameEl = $('game');
   const banner = $('banner'), btnAgain = $('btnAgain'), boardsEl = $('boards');
   const rosterList = $('rosterList'), btnReady = $('btnReady');
+  const speedRampRow = $('speedRampRow'), chkSpeedRamp = $('chkSpeedRamp');
   const menuName = $('menuName'), lobbyName = $('lobbyName');
 
   function sanitizeName(raw) {
@@ -277,6 +280,7 @@
     }
   };
   let peer = null, guestConn = null, roomCode = '';
+  let timeRampEnabled = true; // host-controlled match setting
   let myId = null;
   let roster = []; // {id, name, ready, alive}
   let connections = new Map(); // host: peerId -> DataConnection
@@ -571,7 +575,7 @@
 
     updateSpeed() {
       const lineLevel = 1 + ((this.lines / 10) | 0);
-      const timeLevel = 1 + ((this.elapsed / TIME_LEVEL_MS) | 0);
+      const timeLevel = timeRampEnabled ? 1 + ((this.elapsed / TIME_LEVEL_MS) | 0) : 1;
       const level = Math.max(lineLevel, timeLevel);
       const changed = level !== this.level;
       this.level = level;
@@ -910,6 +914,12 @@
     matchPhase = 'lobby';
     $('lobbyCode').textContent = roomCode || '·····';
     lobbyName.value = getPlayerName();
+    if (mode === 'host') {
+      show(speedRampRow);
+      chkSpeedRamp.checked = timeRampEnabled;
+    } else {
+      hide(speedRampRow);
+    }
     renderRoster();
   }
 
@@ -1201,10 +1211,10 @@
   function tryHostStart() {
     if (mode !== 'host') return;
     if (matchPhase !== 'lobby' && matchPhase !== 'post') return;
-    if (roster.length < 1) return;
+    if (roster.length < 2) return;
     if (!roster.every(p => p.ready)) return;
     const ids = roster.map(p => p.id);
-    broadcast({t: 'start', players: ids.map(id => {
+    broadcast({t: 'start', speedRamp: timeRampEnabled, players: ids.map(id => {
       const p = roster.find(x => x.id === id);
       return {id, name: p.name};
     })});
@@ -1334,6 +1344,7 @@
       return;
     }
     if (data.t === 'start') {
+      timeRampEnabled = data.speedRamp !== false;
       startRemoteMatch(data.players || []);
       return;
     }
@@ -1707,6 +1718,9 @@
   $('btnLobbyLeave').onclick = showMenu;
   $('btnNetGo').onclick = joinRoom;
   $('btnReady').onclick = toggleReady;
+  chkSpeedRamp.addEventListener('change', () => {
+    if (mode === 'host') timeRampEnabled = chkSpeedRamp.checked;
+  });
   menuName.addEventListener('change', () => setPlayerName(menuName.value));
   menuName.addEventListener('blur', () => setPlayerName(menuName.value));
   lobbyName.addEventListener('change', applyLocalRename);
