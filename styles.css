@@ -657,6 +657,10 @@ canvas{
   display:grid;
   place-items:center;
   background:rgba(8,6,4,.55);
+  pointer-events:none;
+}
+#countdown[hidden]{display:none !important;}
+#countdown .countdown-num{
   font-family:var(--font-display);
   font-size:clamp(6rem,22vw,12rem);
   line-height:1;
@@ -665,10 +669,6 @@ canvas{
     0 0 40px rgba(0,0,0,.85),
     0 8px 24px rgba(0,0,0,.7),
     0 0 2px rgba(255,220,140,.35);
-  pointer-events:none;
-}
-#countdown[hidden]{display:none !important;}
-#countdown:not([hidden]){
   animation:countdown-pulse .55s cubic-bezier(.2,1.2,.4,1);
 }
 @keyframes countdown-pulse{

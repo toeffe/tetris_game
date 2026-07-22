@@ -1049,7 +1049,7 @@
     }
     if (countdownEl) {
       countdownEl.hidden = true;
-      countdownEl.textContent = '';
+      countdownEl.innerHTML = '';
     }
   }
 
@@ -1062,10 +1062,11 @@
     let n = 3;
     const tick = () => {
       if (matchPhase !== 'countdown') return;
-      countdownEl.hidden = true;
-      countdownEl.textContent = String(n);
-      void countdownEl.offsetWidth;
       countdownEl.hidden = false;
+      const num = document.createElement('div');
+      num.className = 'countdown-num';
+      num.textContent = String(n);
+      countdownEl.replaceChildren(num);
       if (n <= 1) {
         countdownTimer = setTimeout(() => {
           countdownTimer = 0;
