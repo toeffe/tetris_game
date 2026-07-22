@@ -97,6 +97,7 @@ tetris_game/
 ├── peerjs.min.js           # Vendored PeerJS
 ├── favicon.ico / .png      # Browser icons
 ├── CNAME                   # GitHub Pages custom domain
+├── LICENSE                 # MIT
 ├── README.md
 ├── fonts/                  # Cinzel / Cinzel Decorative (woff2)
 └── textures/               # SVG fills + banner
@@ -129,4 +130,4 @@ Modern Chromium, Firefox, and Safari with WebRTC. Mobile browsers work via the o
 
 ## License
 
-MIT
+Released under the [MIT License](LICENSE). Copyright (c) 2026 toeffe.
