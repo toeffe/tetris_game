@@ -285,6 +285,7 @@
   const $ = id => document.getElementById(id);
   const menu = $('menu'), netPanel = $('netPanel'), lobbyEl = $('lobby'), gameEl = $('game');
   const banner = $('banner'), btnAgain = $('btnAgain'), boardsEl = $('boards');
+  const countdownEl = $('countdown');
   const rosterList = $('rosterList'), btnReady = $('btnReady');
   const speedRampRow = $('speedRampRow'), chkSpeedRamp = $('chkSpeedRamp');
   const dropSpeedRow = $('dropSpeedRow'), selDropSpeed = $('selDropSpeed');
@@ -324,8 +325,8 @@
   let boards = [];
   let boardById = new Map();
   let running = false, ended = false, eliminated = false;
-  let matchPhase = 'idle'; // idle | lobby | playing | post
-  let last = 0, raf = 0, logicTimer = 0;
+  let matchPhase = 'idle'; // idle | lobby | countdown | playing | post
+  let last = 0, raf = 0, logicTimer = 0, countdownTimer = 0;
   const PEER_CONFIG = {
     config: {
       iceServers: [
@@ -988,6 +989,7 @@
   }
 
   function showLobby() {
+    clearCountdown();
     hide(menu);
     hide(netPanel);
     hide(gameEl);
@@ -1020,6 +1022,7 @@
 
   function showMenu() {
     stopLoop();
+    clearCountdown();
     closeNet();
     running = false;
     ended = false;
@@ -1039,6 +1042,45 @@
   }
 
   /* ---------- match lifecycle ---------- */
+  function clearCountdown() {
+    if (countdownTimer) {
+      clearTimeout(countdownTimer);
+      countdownTimer = 0;
+    }
+    if (countdownEl) {
+      countdownEl.hidden = true;
+      countdownEl.textContent = '';
+    }
+  }
+
+  function runCountdown(onDone) {
+    clearCountdown();
+    if (!countdownEl) {
+      onDone();
+      return;
+    }
+    let n = 3;
+    const tick = () => {
+      if (matchPhase !== 'countdown') return;
+      countdownEl.hidden = true;
+      countdownEl.textContent = String(n);
+      void countdownEl.offsetWidth;
+      countdownEl.hidden = false;
+      if (n <= 1) {
+        countdownTimer = setTimeout(() => {
+          countdownTimer = 0;
+          if (matchPhase !== 'countdown') return;
+          clearCountdown();
+          onDone();
+        }, 1000);
+        return;
+      }
+      n -= 1;
+      countdownTimer = setTimeout(tick, 1000);
+    };
+    tick();
+  }
+
   function beginMatch() {
     ended = false;
     eliminated = false;
@@ -1049,7 +1091,7 @@
     hide(btnAgain);
     btnAgain.disabled = false;
     btnAgain.textContent = t('playAgain');
-    roster.forEach(p => { p.alive = true; p.ready = false; });
+    roster.forEach(p => { p.ready = false; });
     last = performance.now();
     stopLoop();
     startLoop();
@@ -1126,6 +1168,7 @@
     const alive = roster.filter(p => p.alive);
     if (alive.length > 1) return;
     ended = true;
+    clearCountdown();
     matchPhase = 'post';
     const winner = alive[0];
     if (winner) {
@@ -1151,6 +1194,7 @@
 
   function applyWin(winnerId) {
     ended = true;
+    clearCountdown();
     matchPhase = 'post';
     roster.forEach(p => { p.ready = false; });
     if (winnerId === myId) {
@@ -1809,9 +1853,15 @@
       others.forEach(p => createBoardSlot(p.id, p.name, false, false, n, opps));
     }
     roster = players.map(p => ({id: p.id, name: p.name, ready: false, alive: true}));
-    beginMatch();
-    const mine = boardById.get(myId);
-    if (mine) syncState(mine, true);
+    matchPhase = 'countdown';
+    hide(banner);
+    hide(btnAgain);
+    for (const b of boards) b.draw();
+    runCountdown(() => {
+      beginMatch();
+      const mine = boardById.get(myId);
+      if (mine) syncState(mine, true);
+    });
   }
 
   function onHostData(fromId, data) {
@@ -1971,7 +2021,7 @@
         roster = roster.filter(p => p.id !== peerId);
         roster.forEach(p => { p.ready = false; });
         broadcastRoster();
-      } else if (matchPhase === 'playing') {
+      } else if (matchPhase === 'playing' || matchPhase === 'countdown') {
         markDead(peerId);
         checkWinner();
       } else if (matchPhase === 'post') {

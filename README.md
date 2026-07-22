@@ -120,7 +120,7 @@ python -m http.server 8080
 npx serve .
 ```
 
-Open `http://localhost:8080`. For multiplayer on one machine, use two browsers or a normal window plus a private window.
+Open `http://localhost:8080`. For multiplayer on one machine.
 
 Deploy by publishing this folder to any static host (e.g. GitHub Pages — this repo uses the domain in `CNAME`).
 
