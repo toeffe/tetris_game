@@ -16,9 +16,21 @@
   const GARBAGE = {1:0,2:1,3:2,4:4};
   const TIME_LEVEL_MS = 30000; // level up every 30s of play, in addition to line-based leveling
   const MIN_DROP_MS = 120; // fastest possible drop interval, so it never becomes unplayable
+  const DROP_SPEED = { slow: 1400, normal: 1000, fast: 400, turbo: 160 };
+  const GARBAGE_TARGET = { clockwise: 1, random: 1, neighbors: 1 };
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const NAME_KEY = 'stonefall-name';
-  const LANG_KEY = 'stonefall-lang';
+  const NAME_KEY = 'vibetrisimo-name';
+  const LANG_KEY = 'vibetrisimo-lang';
+  const FLASHY_KEY = 'vibetrisimo-flashy';
+
+  function storageGet(key) {
+    try { return localStorage.getItem(key); } catch (_) { return null; }
+  }
+
+  function storageSet(key, value) {
+    try { localStorage.setItem(key, value); } catch (_) {}
+  }
+  const FX_COLORS = ['#d4af37', '#c9a227', '#e8d9b5', '#8b1a1a', '#a84848', '#5a9e9a', '#4a7a4a', '#7a5a8a', '#b87333', '#f0e0a0'];
 
   const STR = {
     en: {
@@ -36,6 +48,22 @@
       ready: 'Ready',
       unready: 'Unready',
       speedRamp: 'Speed increases over time',
+      dropSpeed: 'Drop speed',
+      dropSlow: 'Slow',
+      dropNormal: 'Normal',
+      dropFast: 'Fast',
+      dropTurbo: 'Turbo',
+      garbageTarget: 'Who gets garbage',
+      targetClockwise: 'Always the next player',
+      targetRandom: 'Anyone still alive',
+      targetNeighbors: 'Only left or right',
+      clearSingle: 'Single',
+      clearDouble: 'Double',
+      clearTriple: 'Triple',
+      clearTetris: 'Tetris!',
+      comboN: 'Combo x{n}',
+      hitFx: 'HIT +{n}',
+      flashyFx: 'FX',
       leave: 'Leave',
       playAgain: 'Play again',
       menu: 'Menu',
@@ -55,7 +83,7 @@
       needTwo: ' · need at least 1',
       waitReady: ' · waiting for ready',
       startingSoon: ' · starting…',
-      ctrlHint: 'WASD + space · C keep · last survivor wins · garbage hits everyone',
+      ctrlHint: 'WASD / arrows + space · C keep · last survivor wins',
       rematchStart: 'Starting…',
       rematchWait: 'Waiting for others ({ready}/{n})…',
       rematchPartial: '{ready}/{n} ready',
@@ -65,6 +93,8 @@
       rejected: 'Rejected',
       joinedLobby: 'Joined lobby…',
       disconnected: 'Disconnected from host.',
+      reconnecting: 'Host left — reconnecting…',
+      takingHost: 'Host left — taking over…',
       connError: 'Connection error.',
       enterCode: 'Enter the 5-character room code.',
       createFail: 'Could not create room ({err}).',
@@ -91,6 +121,22 @@
       ready: 'Klar',
       unready: 'Ikke klar',
       speedRamp: 'Hastighed øges over tid',
+      dropSpeed: 'Faldhastighed',
+      dropSlow: 'Langsom',
+      dropNormal: 'Normal',
+      dropFast: 'Hurtig',
+      dropTurbo: 'Turbo',
+      garbageTarget: 'Hvem får skrald',
+      targetClockwise: 'Altid næste spiller',
+      targetRandom: 'Enhver der er i live',
+      targetNeighbors: 'Kun venstre eller højre',
+      clearSingle: 'Single',
+      clearDouble: 'Double',
+      clearTriple: 'Triple',
+      clearTetris: 'Tetris!',
+      comboN: 'Kombo x{n}',
+      hitFx: 'RAMT +{n}',
+      flashyFx: 'FX',
       leave: 'Forlad',
       playAgain: 'Spil igen',
       menu: 'Menu',
@@ -110,7 +156,7 @@
       needTwo: ' · mindst 1 spiller',
       waitReady: ' · venter på klar',
       startingSoon: ' · starter…',
-      ctrlHint: 'WASD + mellemrum · C gem · sidste overlevende vinder · skrald rammer alle',
+      ctrlHint: 'WASD / piletaster + mellemrum · C gem · sidste overlevende vinder',
       rematchStart: 'Starter…',
       rematchWait: 'Venter på de andre ({ready}/{n})…',
       rematchPartial: '{ready}/{n} klar',
@@ -120,6 +166,8 @@
       rejected: 'Afvist',
       joinedLobby: 'Tilsluttet lobby…',
       disconnected: 'Forbindelsen til værten blev afbrudt.',
+      reconnecting: 'Værten forlod — genopretter…',
+      takingHost: 'Værten forlod — overtager…',
       connError: 'Forbindelsesfejl.',
       enterCode: 'Indtast rumkoden på 5 tegn.',
       createFail: 'Kunne ikke oprette rum ({err}).',
@@ -137,7 +185,7 @@
 
   function detectLang() {
     try {
-      const saved = localStorage.getItem(LANG_KEY);
+      const saved = storageGet(LANG_KEY);
       if (saved === 'en' || saved === 'da') return saved;
     } catch (_) {}
     const nav = (navigator.language || '').toLowerCase();
@@ -145,6 +193,28 @@
   }
 
   let lang = detectLang();
+
+  function detectFlashy() {
+    try {
+      const saved = storageGet(FLASHY_KEY);
+      if (saved === '0') return false;
+      if (saved === '1') return true;
+    } catch (_) {}
+    try {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+    } catch (_) {}
+    return true;
+  }
+
+  let flashyEnabled = detectFlashy();
+
+  function setFlashy(on) {
+    flashyEnabled = !!on;
+    storageSet(FLASHY_KEY, flashyEnabled ? '1' : '0');
+    const chk = document.getElementById('chkFlashy');
+    if (chk) chk.checked = flashyEnabled;
+    if (!flashyEnabled) clearFxParticles();
+  }
 
   function t(key, vars) {
     let s = (STR[lang] && STR[lang][key]) || STR.en[key] || key;
@@ -164,7 +234,7 @@
   function setLang(next) {
     if (next !== 'en' && next !== 'da') return;
     lang = next;
-    try { localStorage.setItem(LANG_KEY, lang); } catch (_) {}
+    storageSet(LANG_KEY, lang);
     applyI18n();
   }
 
@@ -177,6 +247,10 @@
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
       const key = el.getAttribute('data-i18n-placeholder');
       if (key) el.placeholder = t(key);
+    });
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+      const key = el.getAttribute('data-i18n-aria');
+      if (key) el.setAttribute('aria-label', t(key));
     });
     const da = $('btnLangDa'), en = $('btnLangEn');
     if (da) da.classList.toggle('active', lang === 'da');
@@ -213,6 +287,8 @@
   const banner = $('banner'), btnAgain = $('btnAgain'), boardsEl = $('boards');
   const rosterList = $('rosterList'), btnReady = $('btnReady');
   const speedRampRow = $('speedRampRow'), chkSpeedRamp = $('chkSpeedRamp');
+  const dropSpeedRow = $('dropSpeedRow'), selDropSpeed = $('selDropSpeed');
+  const garbageTargetRow = $('garbageTargetRow'), selGarbageTarget = $('selGarbageTarget');
   const menuName = $('menuName'), lobbyName = $('lobbyName');
 
   function sanitizeName(raw) {
@@ -223,23 +299,21 @@
   function getPlayerName() {
     const fromInput = (lobbyName.value || menuName.value || '').trim();
     if (fromInput) return sanitizeName(fromInput);
-    try {
-      const stored = localStorage.getItem(NAME_KEY);
-      if (stored) return sanitizeName(stored);
-    } catch (_) {}
+    const stored = storageGet(NAME_KEY);
+    if (stored) return sanitizeName(stored);
     return t('defaultName');
   }
 
   function setPlayerName(raw) {
     const name = sanitizeName(raw);
-    try { localStorage.setItem(NAME_KEY, name); } catch (_) {}
+    storageSet(NAME_KEY, name);
     menuName.value = name;
     lobbyName.value = name;
     return name;
   }
 
   try {
-    const stored = localStorage.getItem(NAME_KEY);
+    const stored = storageGet(NAME_KEY);
     if (stored) {
       menuName.value = sanitizeName(stored);
       lobbyName.value = menuName.value;
@@ -271,10 +345,17 @@
   };
   let peer = null, guestConn = null, roomCode = '';
   let timeRampEnabled = true; // host-controlled match setting
+  let dropSpeed = 'normal'; // host-controlled base drop speed preset
+  let garbageTarget = 'clockwise'; // host-controlled garbage targeting
   let myId = null;
+  let hostPlayerId = null; // player id of current relay host (may differ from roomCode after migration)
   let roster = []; // {id, name, ready, alive}
   let connections = new Map(); // host: peerId -> DataConnection
   let syncAcc = 0;
+  let suppressNetClose = false;
+  let migratePhase = null; // null | 'taking' | 'reconnecting'
+  let migrateTimer = null;
+  let migrateAttempt = 0;
 
   function rotate(m) {
     const n = m.length, out = Array.from({length:n}, () => Array(n).fill(0));
@@ -387,11 +468,12 @@
       this.score = 0;
       this.lines = 0;
       this.level = 1;
-      this.dropMs = 1000;
+      this.dropMs = DROP_SPEED[dropSpeed] || DROP_SPEED.normal;
       this.elapsed = 0;
       this.acc = 0;
       this.over = false;
       this.gQueue = 0;
+      this.combo = 0;
       this.flashUntil = 0;
       this.flashKind = null;
       this.spawn();
@@ -504,6 +586,7 @@
       this.flashKind = 'lock';
       const cleared = this.clearLines();
       if (cleared) {
+        this.combo++;
         const base = [0, 100, 300, 500, 800][cleared] || 800;
         this.score += base * this.level;
         this.lines += cleared;
@@ -513,6 +596,9 @@
         if (g) sendGarbage(this, g);
         this.flashUntil = performance.now() + 200;
         this.flashKind = 'clear';
+        showClearFx(this, cleared);
+      } else {
+        this.combo = 0;
       }
       if (this.gQueue) {
         this.applyGarbage(this.gQueue);
@@ -569,7 +655,8 @@
       const level = Math.max(lineLevel, timeLevel);
       const changed = level !== this.level;
       this.level = level;
-      this.dropMs = Math.max(MIN_DROP_MS, 1000 - (level - 1) * 75);
+      const baseDropMs = DROP_SPEED[dropSpeed] || DROP_SPEED.normal;
+      this.dropMs = Math.max(MIN_DROP_MS, baseDropMs - (level - 1) * 75);
       return changed;
     }
 
@@ -639,11 +726,13 @@
         score: this.score,
         level: this.level,
         lines: this.lines,
+        combo: this.combo,
         over: this.over,
       };
     }
 
     applyRemote(data) {
+      const prevLines = this.lines;
       this.grid = data.grid;
       this.piece = data.piece;
       this.next = data.next;
@@ -651,9 +740,12 @@
       this.score = data.score;
       this.level = data.level;
       this.lines = data.lines;
+      if ('combo' in data) this.combo = data.combo;
       this.over = !!data.over;
       this.paintHud();
       if (this.els.over) this.els.over.textContent = this.over ? t('topOut') : '';
+      const gained = this.lines - prevLines;
+      if (gained > 0) showClearFx(this, Math.min(4, gained));
     }
   }
 
@@ -851,6 +943,7 @@
     const board = new Board({
       canvas, nextCanvas: next, holdCanvas: hold,
       els: {
+        root: box,
         score,
         level: meta.querySelector('.lv'),
         lines: meta.querySelector('.ln'),
@@ -907,8 +1000,20 @@
     if (mode === 'host') {
       show(speedRampRow);
       chkSpeedRamp.checked = timeRampEnabled;
+      chkSpeedRamp.disabled = false;
+      show(dropSpeedRow);
+      selDropSpeed.value = DROP_SPEED[dropSpeed] ? dropSpeed : 'normal';
+      selDropSpeed.disabled = false;
+      show(garbageTargetRow);
+      selGarbageTarget.value = GARBAGE_TARGET[garbageTarget] ? garbageTarget : 'clockwise';
+      selGarbageTarget.disabled = false;
     } else {
       hide(speedRampRow);
+      hide(dropSpeedRow);
+      hide(garbageTargetRow);
+      chkSpeedRamp.disabled = true;
+      selDropSpeed.disabled = true;
+      selGarbageTarget.disabled = true;
     }
     renderRoster();
   }
@@ -1010,7 +1115,10 @@
     const p = roster.find(x => x.id === id);
     if (p) p.alive = false;
     const b = boardById.get(id);
-    if (b && b.els.over) b.els.over.textContent = t('topOut');
+    // Keep local "ELIMINATED" label if onTopOut already set it
+    if (b && b.els.over && !(b.live && eliminated)) {
+      b.els.over.textContent = t('topOut');
+    }
   }
 
   function checkWinner() {
@@ -1045,8 +1153,10 @@
     ended = true;
     matchPhase = 'post';
     roster.forEach(p => { p.ready = false; });
-    if (winnerId === myId) showBanner(t('victory'), 'win');
-    else {
+    if (winnerId === myId) {
+      showBanner(t('victory'), 'win');
+      burstFireworks();
+    } else {
       const w = roster.find(p => p.id === winnerId);
       showBanner(t('wins', {name: w?.name || t('defaultName')}), 'lose');
     }
@@ -1108,7 +1218,16 @@
     return s;
   }
 
+  function clearMigrateTimer() {
+    if (migrateTimer) {
+      clearTimeout(migrateTimer);
+      migrateTimer = null;
+    }
+  }
+
   function closeNet() {
+    clearMigrateTimer();
+    suppressNetClose = true;
     connections.forEach(c => { try { c.close(); } catch (_) {} });
     connections.clear();
     try { guestConn?.close(); } catch (_) {}
@@ -1117,6 +1236,134 @@
     peer = null;
     roomCode = '';
     myId = null;
+    hostPlayerId = null;
+    migratePhase = null;
+    migrateAttempt = 0;
+    suppressNetClose = false;
+  }
+
+  function migrationFailed() {
+    clearMigrateTimer();
+    migratePhase = null;
+    migrateAttempt = 0;
+    if (matchPhase === 'lobby') {
+      $('lobbyStatus').textContent = t('disconnected');
+      hide(lobbyEl);
+      showMenu();
+    } else if (matchPhase === 'post') {
+      $('ctrlHint').textContent = t('disconnected');
+      showMenu();
+    }
+  }
+
+  function canMigratePhase() {
+    return matchPhase === 'lobby' || matchPhase === 'post';
+  }
+
+  function handleHostLost() {
+    if (suppressNetClose || mode !== 'guest') return;
+    if (!canMigratePhase()) {
+      $('ctrlHint').textContent = t('disconnected');
+      return;
+    }
+    if (migratePhase === 'taking' || migratePhase === 'reconnecting') return;
+
+    // Detach so late close/error on the old host link cannot re-enter migration
+    guestConn = null;
+
+    const departed = hostPlayerId;
+    roster = roster.filter(p => p.id !== departed);
+    roster.forEach(p => { p.ready = false; });
+    if (!roster.length || !roster.some(p => p.id === myId)) {
+      migrationFailed();
+      return;
+    }
+    const successorId = roster[0].id;
+    hostPlayerId = successorId;
+    if (matchPhase === 'lobby') renderRoster();
+    else updateRematchHint();
+    if (myId === successorId) {
+      migratePhase = 'taking';
+      if (matchPhase === 'lobby') $('lobbyStatus').textContent = t('takingHost');
+      becomeRelayHost(0);
+    } else {
+      migratePhase = 'reconnecting';
+      migrateAttempt = 0;
+      if (matchPhase === 'lobby') $('lobbyStatus').textContent = t('reconnecting');
+      scheduleGuestReconnect(0);
+    }
+  }
+
+  function acceptHostConnection(c) {
+    if (matchPhase === 'lobby' || matchPhase === 'post') {
+      wireHostConn(c);
+      return;
+    }
+    c.on('open', () => {
+      sendTo(c, {t: 'reject', reason: 'match_started'});
+      c.close();
+    });
+  }
+
+  function becomeRelayHost(attempt) {
+    clearMigrateTimer();
+    suppressNetClose = true;
+    try { guestConn?.close(); } catch (_) {}
+    guestConn = null;
+    suppressNetClose = false;
+
+    if (!peer || peer.destroyed) {
+      migrationFailed();
+      return;
+    }
+
+    mode = 'host';
+    hostPlayerId = myId;
+    connections.clear();
+    migratePhase = null;
+    migrateAttempt = 0;
+
+    // Keep this peer (player id). Guests reconnect to myId — no room-code reclaim race.
+    if (!peer._trisimoHostListen) {
+      peer._trisimoHostListen = true;
+      peer.on('connection', acceptHostConnection);
+    }
+
+    if (matchPhase === 'lobby') {
+      showLobby();
+      $('lobbyStatus').textContent = '';
+      renderRoster();
+    } else if (matchPhase === 'post') {
+      updateRematchHint();
+    }
+  }
+
+  function scheduleGuestReconnect(attempt) {
+    clearMigrateTimer();
+    migrateAttempt = attempt;
+    if (attempt > 16) {
+      migrationFailed();
+      return;
+    }
+    const targetId = hostPlayerId;
+    if (!targetId || targetId === myId) {
+      migrationFailed();
+      return;
+    }
+    if (matchPhase === 'lobby') $('lobbyStatus').textContent = t('reconnecting');
+    migrateTimer = setTimeout(() => {
+      migrateTimer = null;
+      if (mode !== 'guest' || !canMigratePhase()) return;
+      if (!peer || peer.destroyed) {
+        migrationFailed();
+        return;
+      }
+      suppressNetClose = true;
+      try { guestConn?.close(); } catch (_) {}
+      guestConn = null;
+      suppressNetClose = false;
+      wireGuestConn(peer.connect(targetId, {reliable: true}));
+    }, 300 + attempt * 200);
   }
 
   function sendTo(conn, msg) {
@@ -1173,9 +1420,328 @@
     return null;
   }
 
-  function fanoutGarbage(fromId, n) {
-    const targetId = nextAliveTargetId(fromId);
-    if (!targetId) return;
+  function aliveOpponentIds(fromId) {
+    return roster.filter(p => p.id !== fromId && p.alive !== false).map(p => p.id);
+  }
+
+  function neighborTargetIds(fromId) {
+    const ids = roster.map(p => p.id);
+    const n = ids.length;
+    const idx = ids.indexOf(fromId);
+    if (idx === -1 || !n) return [];
+    const found = [];
+    for (let i = 1; i < n; i++) {
+      const cand = ids[(idx + i) % n];
+      if (cand === fromId) continue;
+      const p = roster.find(x => x.id === cand);
+      if (p && p.alive !== false) {
+        found.push(cand);
+        break;
+      }
+    }
+    for (let i = 1; i < n; i++) {
+      const cand = ids[(idx - i + n) % n];
+      if (cand === fromId) continue;
+      const p = roster.find(x => x.id === cand);
+      if (p && p.alive !== false) {
+        if (!found.includes(cand)) found.push(cand);
+        break;
+      }
+    }
+    return found;
+  }
+
+  function pickGarbageTarget(fromId) {
+    if (garbageTarget === 'random') {
+      const opps = aliveOpponentIds(fromId);
+      if (!opps.length) return null;
+      return opps[(Math.random() * opps.length) | 0];
+    }
+    if (garbageTarget === 'neighbors') {
+      let pool = neighborTargetIds(fromId);
+      if (!pool.length) pool = aliveOpponentIds(fromId);
+      if (!pool.length) return null;
+      return pool[(Math.random() * pool.length) | 0];
+    }
+    return nextAliveTargetId(fromId);
+  }
+
+  function showBoardToast(board, text, kind) {
+    if (!flashyEnabled) return;
+    const root = board && board.els && board.els.root;
+    if (!root || !text) return;
+    const el = document.createElement('div');
+    el.className = 'fx-toast' + (kind ? ' ' + kind : '');
+    el.textContent = text;
+    root.appendChild(el);
+    window.setTimeout(() => el.remove(), 900);
+  }
+
+  /* ---------- particle FX (confetti / glitter / fireworks) ---------- */
+  const fxCanvas = document.getElementById('fxLayer');
+  const fxCtx = fxCanvas ? fxCanvas.getContext('2d', { alpha: true }) : null;
+  let fxParticles = [];
+  let fxRaf = 0;
+  let fxLast = 0;
+
+  function resizeFxLayer() {
+    if (!fxCanvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    fxCanvas.width = Math.max(1, (w * dpr) | 0);
+    fxCanvas.height = Math.max(1, (h * dpr) | 0);
+    fxCanvas.style.width = w + 'px';
+    fxCanvas.style.height = h + 'px';
+    if (fxCtx) {
+      fxCtx.setTransform(1, 0, 0, 1, 0, 0);
+      fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+      fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+  }
+
+  function setFxLayerVisible(on) {
+    if (fxCanvas) fxCanvas.style.visibility = on ? 'visible' : 'hidden';
+  }
+
+  function clearFxParticles() {
+    fxParticles = [];
+    if (fxRaf) {
+      cancelAnimationFrame(fxRaf);
+      fxRaf = 0;
+    }
+    if (fxCtx && fxCanvas) {
+      fxCtx.setTransform(1, 0, 0, 1, 0, 0);
+      fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+      resizeFxLayer();
+    }
+    setFxLayerVisible(false);
+  }
+
+  function boardOrigin(board) {
+    const root = board && board.els && board.els.root;
+    if (root) {
+      const r = root.getBoundingClientRect();
+      return {x: r.left + r.width / 2, y: r.top + r.height * 0.42};
+    }
+    return {x: window.innerWidth / 2, y: window.innerHeight * 0.4};
+  }
+
+  function pushParticle(p) {
+    fxParticles.push(p);
+    setFxLayerVisible(true);
+    if (!fxRaf) {
+      fxLast = performance.now();
+      fxRaf = requestAnimationFrame(tickFx);
+    }
+  }
+
+  function spawnBurst(x, y, count, make) {
+    for (let i = 0; i < count; i++) pushParticle(make(i));
+  }
+
+  function burstConfetti(x, y, count) {
+    spawnBurst(x, y, count, () => {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 2.2 + Math.random() * 7.5;
+      return {
+        kind: 'rect',
+        x, y,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - (2 + Math.random() * 4),
+        g: 0.18 + Math.random() * 0.12,
+        life: 0.7 + Math.random() * 0.9,
+        max: 0,
+        rot: Math.random() * Math.PI,
+        spin: (Math.random() - 0.5) * 0.35,
+        w: 3 + Math.random() * 5,
+        h: 2 + Math.random() * 3,
+        color: FX_COLORS[(Math.random() * FX_COLORS.length) | 0],
+      };
+    });
+  }
+
+  function burstGlitter(x, y, count) {
+    spawnBurst(x, y, count, () => {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.4;
+      const spd = 1.5 + Math.random() * 5;
+      return {
+        kind: 'spark',
+        x: x + (Math.random() - 0.5) * 24,
+        y: y + (Math.random() - 0.5) * 16,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        g: 0.04,
+        life: 0.45 + Math.random() * 0.55,
+        max: 0,
+        size: 1.2 + Math.random() * 2.4,
+        color: Math.random() > 0.35 ? '#f0e0a0' : '#d4af37',
+      };
+    });
+  }
+
+  function burstEmbers(x, y, count) {
+    spawnBurst(x, y, count, () => {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+      const spd = 1 + Math.random() * 4.5;
+      return {
+        kind: 'ember',
+        x, y,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - 1,
+        g: 0.12,
+        life: 0.35 + Math.random() * 0.45,
+        max: 0,
+        size: 1.5 + Math.random() * 2.5,
+        color: Math.random() > 0.5 ? '#e06060' : '#c9a227',
+      };
+    });
+  }
+
+  function burstFirework(x, y) {
+    const hueColors = ['#d4af37', '#f0e0a0', '#e06060', '#5a9e9a', '#c9a227', '#f0c8c8'];
+    const ring = 36 + ((Math.random() * 18) | 0);
+    spawnBurst(x, y, ring, (i) => {
+      const ang = (i / ring) * Math.PI * 2 + Math.random() * 0.08;
+      const spd = 3.2 + Math.random() * 4.8;
+      return {
+        kind: 'ember',
+        x, y,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        g: 0.06,
+        life: 0.7 + Math.random() * 0.6,
+        max: 0,
+        size: 1.8 + Math.random() * 2.2,
+        color: hueColors[(Math.random() * hueColors.length) | 0],
+        trail: true,
+      };
+    });
+    burstGlitter(x, y, 18);
+  }
+
+  function burstFireworks() {
+    if (!flashyEnabled || !fxCtx) return;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight * 0.38;
+    burstFirework(cx, cy);
+    window.setTimeout(() => burstFirework(cx - 90, cy + 30), 160);
+    window.setTimeout(() => burstFirework(cx + 95, cy + 20), 280);
+    window.setTimeout(() => burstFirework(cx - 40, cy - 40), 420);
+    window.setTimeout(() => burstConfetti(cx, cy, 50), 200);
+  }
+
+  function fxForClear(board, cleared) {
+    if (!flashyEnabled || !fxCtx) return;
+    const o = boardOrigin(board);
+    if (cleared >= 4) {
+      burstConfetti(o.x, o.y, 70);
+      burstGlitter(o.x, o.y, 40);
+    } else if (cleared >= 3) {
+      burstConfetti(o.x, o.y, 32);
+    }
+    if (board.combo >= 5) {
+      burstGlitter(o.x, o.y - 10, 55);
+      burstConfetti(o.x, o.y, 24);
+    } else if (board.combo >= 3) {
+      burstGlitter(o.x, o.y - 8, 36);
+    }
+  }
+
+  function fxForHit(board) {
+    if (!flashyEnabled || !fxCtx) return;
+    const o = boardOrigin(board);
+    burstEmbers(o.x, o.y, 22);
+  }
+
+  function tickFx(now) {
+    fxRaf = 0;
+    if (!fxCtx || !fxCanvas) return;
+    const dt = Math.min(0.033, (now - fxLast) / 1000);
+    fxLast = now;
+    fxCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    const next = [];
+    for (let i = 0; i < fxParticles.length; i++) {
+      const p = fxParticles[i];
+      if (!p.max) p.max = p.life;
+      p.life -= dt;
+      if (p.life <= 0) continue;
+      p.vy += p.g;
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.spin) p.rot += p.spin;
+      p.vx *= 0.992;
+      const a = Math.max(0, Math.min(1, p.life / (p.max * 0.55)));
+      fxCtx.globalAlpha = a;
+      fxCtx.fillStyle = p.color;
+      if (p.kind === 'rect') {
+        fxCtx.save();
+        fxCtx.translate(p.x, p.y);
+        fxCtx.rotate(p.rot || 0);
+        fxCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        fxCtx.restore();
+      } else if (p.kind === 'spark') {
+        fxCtx.beginPath();
+        fxCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        fxCtx.fill();
+        fxCtx.globalAlpha = a * 0.35;
+        fxCtx.beginPath();
+        fxCtx.arc(p.x, p.y, p.size * 2.4, 0, Math.PI * 2);
+        fxCtx.fill();
+      } else {
+        if (p.trail) {
+          fxCtx.globalAlpha = a * 0.35;
+          fxCtx.beginPath();
+          fxCtx.arc(p.x - p.vx * 1.4, p.y - p.vy * 1.4, p.size * 0.7, 0, Math.PI * 2);
+          fxCtx.fill();
+          fxCtx.globalAlpha = a;
+        }
+        fxCtx.beginPath();
+        fxCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        fxCtx.fill();
+      }
+      next.push(p);
+    }
+    fxCtx.globalAlpha = 1;
+    fxParticles = next;
+    if (fxParticles.length) fxRaf = requestAnimationFrame(tickFx);
+    else setFxLayerVisible(false);
+  }
+
+  resizeFxLayer();
+  setFxLayerVisible(false);
+  window.addEventListener('resize', resizeFxLayer);
+
+  function showClearFx(board, cleared) {
+    if (!flashyEnabled) return;
+    const keys = ['', 'clearSingle', 'clearDouble', 'clearTriple', 'clearTetris'];
+    const key = keys[cleared];
+    if (key) {
+      const kind = cleared >= 4 ? 'tetris' : (cleared >= 3 ? 'triple' : '');
+      showBoardToast(board, t(key), kind);
+    }
+    if (board.combo >= 2) {
+      window.setTimeout(() => {
+        if (flashyEnabled) showBoardToast(board, t('comboN', {n: board.combo}), 'combo');
+      }, 120);
+    }
+    fxForClear(board, cleared);
+  }
+
+  function showHitFx(toId, n) {
+    const board = boardById.get(toId);
+    if (!board || !board.els || !board.els.root) return;
+    const root = board.els.root;
+    root.classList.remove('hit-pulse');
+    void root.offsetWidth;
+    root.classList.add('hit-pulse');
+    window.setTimeout(() => root.classList.remove('hit-pulse'), 550);
+    if (!flashyEnabled) return;
+    showBoardToast(board, t('hitFx', {n}), 'hit');
+    fxForHit(board);
+  }
+
+  function deliverGarbage(targetId, fromId, n) {
     if (targetId === myId) {
       const local = boardById.get(myId);
       if (local && !local.over && matchPhase === 'playing') local.addGarbage(n);
@@ -1183,6 +1749,15 @@
     }
     const c = connections.get(targetId);
     if (c) sendTo(c, {t: 'garbage', n, from: fromId});
+  }
+
+  function fanoutGarbage(fromId, n) {
+    const targetId = pickGarbageTarget(fromId);
+    if (!targetId) return;
+    deliverGarbage(targetId, fromId, n);
+    const hit = {t: 'hit', from: fromId, to: targetId, n};
+    broadcast(hit);
+    showHitFx(targetId, n);
   }
 
   function handleOver(fromId) {
@@ -1204,7 +1779,7 @@
     if (roster.length < 1) return;
     if (!roster.every(p => p.ready)) return;
     const ids = roster.map(p => p.id);
-    broadcast({t: 'start', speedRamp: timeRampEnabled, players: ids.map(id => {
+    broadcast({t: 'start', speedRamp: timeRampEnabled, dropSpeed, garbageTarget, players: ids.map(id => {
       const p = roster.find(x => x.id === id);
       return {id, name: p.name};
     })});
@@ -1242,19 +1817,26 @@
   function onHostData(fromId, data) {
     if (!data || typeof data !== 'object') return;
     if (data.t === 'hello') {
-      if (matchPhase !== 'lobby') {
+      if (matchPhase === 'playing' || (matchPhase !== 'lobby' && matchPhase !== 'post')) {
         sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
         connections.get(fromId)?.close();
         connections.delete(fromId);
         return;
       }
-      if (roster.length >= MAX_PLAYERS) {
-        sendTo(connections.get(fromId), {t: 'reject', reason: 'room_full'});
-        connections.get(fromId)?.close();
-        connections.delete(fromId);
-        return;
-      }
-      if (!roster.find(p => p.id === fromId)) {
+      const existing = roster.find(p => p.id === fromId);
+      if (!existing) {
+        if (matchPhase !== 'lobby') {
+          sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
+          connections.get(fromId)?.close();
+          connections.delete(fromId);
+          return;
+        }
+        if (roster.length >= MAX_PLAYERS) {
+          sendTo(connections.get(fromId), {t: 'reject', reason: 'room_full'});
+          connections.get(fromId)?.close();
+          connections.delete(fromId);
+          return;
+        }
         roster.push({
           id: fromId,
           name: sanitizeName(data.name),
@@ -1263,7 +1845,7 @@
         });
         roster.forEach(p => { p.ready = false; });
       }
-      sendTo(connections.get(fromId), {t: 'welcome', id: fromId, code: roomCode});
+      sendTo(connections.get(fromId), {t: 'welcome', id: fromId, code: roomCode, hostId: myId});
       broadcastRoster();
       return;
     }
@@ -1308,6 +1890,10 @@
   function onGuestData(data) {
     if (!data || typeof data !== 'object') return;
     if (data.t === 'reject') {
+      if (migratePhase === 'reconnecting') {
+        scheduleGuestReconnect(migrateAttempt + 1);
+        return;
+      }
       $('netStatus').textContent = reasonText(data.reason);
       $('lobbyStatus').textContent = reasonText(data.reason);
       closeNet();
@@ -1320,7 +1906,16 @@
     if (data.t === 'welcome') {
       myId = data.id;
       roomCode = data.code || roomCode;
-      showLobby();
+      hostPlayerId = data.hostId || hostPlayerId || roomCode;
+      migratePhase = null;
+      migrateAttempt = 0;
+      clearMigrateTimer();
+      if (matchPhase === 'lobby' || matchPhase === 'idle') {
+        $('lobbyStatus').textContent = '';
+        showLobby();
+      } else if (matchPhase === 'post') {
+        updateRematchHint();
+      }
       return;
     }
     if (data.t === 'roster') {
@@ -1335,6 +1930,8 @@
     }
     if (data.t === 'start') {
       timeRampEnabled = data.speedRamp !== false;
+      dropSpeed = DROP_SPEED[data.dropSpeed] ? data.dropSpeed : 'normal';
+      garbageTarget = GARBAGE_TARGET[data.garbageTarget] ? data.garbageTarget : 'clockwise';
       startRemoteMatch(data.players || []);
       return;
     }
@@ -1347,6 +1944,10 @@
     if (data.t === 'garbage') {
       const local = boardById.get(myId);
       if (local && !local.over && data.from !== myId) local.addGarbage(data.n);
+      return;
+    }
+    if (data.t === 'hit') {
+      if (data.to) showHitFx(data.to, data.n || 0);
       return;
     }
     if (data.t === 'over') {
@@ -1364,6 +1965,7 @@
     connections.set(peerId, c);
     c.on('data', data => onHostData(peerId, data));
     c.on('close', () => {
+      if (suppressNetClose) return;
       connections.delete(peerId);
       if (matchPhase === 'lobby') {
         roster = roster.filter(p => p.id !== peerId);
@@ -1384,22 +1986,34 @@
   function wireGuestConn(c) {
     guestConn = c;
     const onOpen = () => {
-      $('netStatus').textContent = t('joinedLobby');
+      if (matchPhase === 'lobby') $('netStatus').textContent = t('joinedLobby');
       sendTo(c, {t: 'hello', name: getPlayerName()});
     };
     if (c.open) onOpen();
     else c.on('open', onOpen);
     c.on('data', onGuestData);
     c.on('close', () => {
+      if (suppressNetClose || mode !== 'guest') return;
+      if (guestConn !== c) return; // ignore stale close from a replaced connection
+      if (migratePhase === 'reconnecting') {
+        scheduleGuestReconnect(migrateAttempt + 1);
+        return;
+      }
+      if (migratePhase === 'taking') return;
+      if (canMigratePhase()) {
+        handleHostLost();
+        return;
+      }
       if (matchPhase !== 'idle') {
         $('ctrlHint').textContent = t('disconnected');
-        if (matchPhase === 'lobby') {
-          hide(lobbyEl);
-          showMenu();
-        }
       }
     });
     c.on('error', () => {
+      if (guestConn !== c) return;
+      if (migratePhase === 'reconnecting') {
+        scheduleGuestReconnect(migrateAttempt + 1);
+        return;
+      }
       $('netStatus').textContent = t('connError');
       $('btnNetGo').disabled = false;
     });
@@ -1436,6 +2050,7 @@
   function showHostUI(code) {
     roomCode = code;
     myId = code;
+    hostPlayerId = code;
     const name = setPlayerName(getPlayerName());
     roster = [{id: myId, name, ready: false, alive: true}];
     showLobby();
@@ -1460,23 +2075,7 @@
     roomCode = code;
     peer = new Peer(code, PEER_CONFIG);
     peer.on('open', id => showHostUI(id));
-    peer.on('connection', c => {
-      if (matchPhase !== 'lobby') {
-        c.on('open', () => {
-          sendTo(c, {t: 'reject', reason: 'match_started'});
-          c.close();
-        });
-        return;
-      }
-      if (roster.length >= MAX_PLAYERS) {
-        c.on('open', () => {
-          sendTo(c, {t: 'reject', reason: 'room_full'});
-          c.close();
-        });
-        return;
-      }
-      wireHostConn(c);
-    });
+    peer.on('connection', acceptHostConnection);
     peer.on('error', err => {
       if (err.type === 'unavailable-id' && attempt < 8) {
         hostRoom(attempt + 1);
@@ -1625,26 +2224,26 @@
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
     const k = e.key;
-    if (k === 'a' || k === 'A') {
+    if (k === 'a' || k === 'A' || k === 'ArrowLeft') {
       if (e.repeat) { e.preventDefault(); return; }
       pressHorz(-1);
       e.preventDefault();
       return;
     }
-    if (k === 'd' || k === 'D') {
+    if (k === 'd' || k === 'D' || k === 'ArrowRight') {
       if (e.repeat) { e.preventDefault(); return; }
       pressHorz(1);
       e.preventDefault();
       return;
     }
-    if (k === 's' || k === 'S') {
+    if (k === 's' || k === 'S' || k === 'ArrowDown') {
       if (e.repeat) { e.preventDefault(); return; }
       held.soft = true;
       softAcc = SOFT_MS; // soft once immediately
       e.preventDefault();
       return;
     }
-    if (k === 'w' || k === 'W') {
+    if (k === 'w' || k === 'W' || k === 'ArrowUp') {
       if (e.repeat) { e.preventDefault(); return; }
       act('rot');
       e.preventDefault();
@@ -1665,9 +2264,9 @@
 
   document.addEventListener('keyup', e => {
     const k = e.key;
-    if (k === 'a' || k === 'A') releaseHorz(-1);
-    else if (k === 'd' || k === 'D') releaseHorz(1);
-    else if (k === 's' || k === 'S') {
+    if (k === 'a' || k === 'A' || k === 'ArrowLeft') releaseHorz(-1);
+    else if (k === 'd' || k === 'D' || k === 'ArrowRight') releaseHorz(1);
+    else if (k === 's' || k === 'S' || k === 'ArrowDown') {
       held.soft = false;
       softAcc = 0;
     }
@@ -1711,6 +2310,12 @@
   chkSpeedRamp.addEventListener('change', () => {
     if (mode === 'host') timeRampEnabled = chkSpeedRamp.checked;
   });
+  selDropSpeed.addEventListener('change', () => {
+    if (mode === 'host' && DROP_SPEED[selDropSpeed.value]) dropSpeed = selDropSpeed.value;
+  });
+  selGarbageTarget.addEventListener('change', () => {
+    if (mode === 'host' && GARBAGE_TARGET[selGarbageTarget.value]) garbageTarget = selGarbageTarget.value;
+  });
   menuName.addEventListener('change', () => setPlayerName(menuName.value));
   menuName.addEventListener('blur', () => setPlayerName(menuName.value));
   lobbyName.addEventListener('change', applyLocalRename);
@@ -1744,5 +2349,10 @@
   $('btnAgain').onclick = rematch;
   $('btnLangDa').onclick = () => setLang('da');
   $('btnLangEn').onclick = () => setLang('en');
+  const chkFlashy = $('chkFlashy');
+  if (chkFlashy) {
+    chkFlashy.checked = flashyEnabled;
+    chkFlashy.addEventListener('change', () => setFlashy(chkFlashy.checked));
+  }
   applyI18n();
 })();

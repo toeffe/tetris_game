@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>VibeTrisimo</title>
+<link rel="icon" href="./favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="./favicon.png">
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -17,15 +19,20 @@
   <div class="lang-bar" role="group" aria-label="Language">
     <button type="button" id="btnLangDa" class="lang-btn" data-lang="da">DA</button>
     <button type="button" id="btnLangEn" class="lang-btn" data-lang="en">EN</button>
+    <label class="flashy-toggle" title="Effects">
+      <input id="chkFlashy" type="checkbox" checked>
+      <span data-i18n="flashyFx">FX</span>
+    </label>
   </div>
+
+  <canvas id="fxLayer" aria-hidden="true"></canvas>
 
   <h1 class="title">VibeTrisimo</h1>
   <p class="subtitle" data-i18n="subtitle">Tetris battle</p>
 
   <div id="menu" class="panel">
     <span class="panel-corners" aria-hidden="true"></span>
-    <label class="field-label" for="menuName" data-i18n="yourName">Your name</label>
-    <input id="menuName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" placeholder="Name">
+    <input id="menuName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" data-i18n-aria="yourName" placeholder="Name" aria-label="Your name">
     <button id="btnHost" data-i18n="hostGame">Host game</button>
     <button id="btnJoin" class="secondary" data-i18n="joinGame">Join game</button>
     <p class="hint" data-i18n="menuHint">Up to 8 players.</p>
@@ -44,13 +51,28 @@
 
   <div id="lobby" class="panel" hidden>
     <span class="panel-corners" aria-hidden="true"></span>
-    <p class="hint" data-i18n="roomCode">Room code</p>
-    <div id="lobbyCode" class="room-code">·····</div>
+    <div id="lobbyCode" class="room-code" data-i18n-aria="roomCode" aria-label="Room code">·····</div>
     <button id="btnCopyLobby" type="button" data-i18n="copyCode">Copy code</button>
-    <label class="field-label" for="lobbyName" data-i18n="yourName">Your name</label>
-    <input id="lobbyName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" placeholder="Name">
+    <input id="lobbyName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" data-i18n-aria="yourName" placeholder="Name" aria-label="Your name">
     <ul id="rosterList" class="roster"></ul>
     <p id="lobbyStatus" class="hint"></p>
+    <label id="dropSpeedRow" class="setting-row" hidden>
+      <span data-i18n="dropSpeed">Drop speed</span>
+      <select id="selDropSpeed">
+        <option value="slow" data-i18n="dropSlow">Slow</option>
+        <option value="normal" data-i18n="dropNormal" selected>Normal</option>
+        <option value="fast" data-i18n="dropFast">Fast</option>
+        <option value="turbo" data-i18n="dropTurbo">Turbo</option>
+      </select>
+    </label>
+    <label id="garbageTargetRow" class="setting-row" hidden>
+      <span data-i18n="garbageTarget">Who gets garbage</span>
+      <select id="selGarbageTarget">
+        <option value="clockwise" data-i18n="targetClockwise" selected>Always the next player</option>
+        <option value="random" data-i18n="targetRandom">Anyone still alive</option>
+        <option value="neighbors" data-i18n="targetNeighbors">Only left or right</option>
+      </select>
+    </label>
     <label id="speedRampRow" class="toggle-row" hidden>
       <input id="chkSpeedRamp" type="checkbox" checked>
       <span data-i18n="speedRamp">Speed increases over time</span>
