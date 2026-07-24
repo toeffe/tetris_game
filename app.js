@@ -412,6 +412,11 @@
   const START_LEAD_MIN_MS = 40;
   const START_LEAD_MAX_MS = 400;
   let pendingStart = null; // host: {players, expect, acks, sentAt, maxRtt, timer} | guest: {players}
+  let startLeadMs = START_LEAD_MIN_MS; // last measured host delay for go/begin
+  let queuedCdBeat = null; // guest: latest countdown beat if UI not mounted yet
+  let cdReadyWait = null; // host: {expect: Set, ready: Set, timer} while waiting for boards to mount
+  let earlyCdReady = new Set(); // guest acks that arrived before host armed the wait
+  const CD_READY_TIMEOUT_MS = 1500;
   const PEER_CONFIG = {
     config: {
       iceServers: [
@@ -1364,6 +1369,14 @@
     if (pendingStart && pendingStart.timer) clearTimeout(pendingStart.timer);
     if (pendingStart && pendingStart.leadTimer) clearTimeout(pendingStart.leadTimer);
     pendingStart = null;
+    queuedCdBeat = null;
+    clearCdReadyWait();
+    earlyCdReady.clear();
+  }
+
+  function clearCdReadyWait() {
+    if (cdReadyWait && cdReadyWait.timer) clearTimeout(cdReadyWait.timer);
+    cdReadyWait = null;
   }
 
   function clearCountdown() {
@@ -1381,42 +1394,125 @@
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
-  function runCountdown(onDone) {
+  function showCountdownBeat(text, go) {
+    if (!countdownEl) return;
+    countdownEl.hidden = false;
+    const num = document.createElement('div');
+    num.className = 'countdown-num' + (go ? ' countdown-go' : '');
+    num.textContent = text;
+    countdownEl.replaceChildren(num);
+  }
+
+  function applyCountdownBeat(v) {
+    if (v === 'go') showCountdownBeat(t('go'), true);
+    else showCountdownBeat(String(v), false);
+  }
+
+  function finishCountdownToPlay() {
     clearCountdown();
-    if (!countdownEl) {
-      onDone();
+    beginMatch();
+    const mine = boardById.get(myId);
+    if (mine) syncState(mine, true);
+  }
+
+  function armHostCountdown() {
+    if (mode !== 'host' || matchPhase !== 'countdown') return;
+    const guestIds = [...connections.keys()];
+    if (!guestIds.length) {
+      earlyCdReady.clear();
+      runHostCountdown();
       return;
     }
-    const beat = reduceMotion() ? 420 : 900;
-    const goBeat = reduceMotion() ? 380 : 720;
-    let n = 3;
-    const showBeat = (text, go) => {
-      countdownEl.hidden = false;
-      const num = document.createElement('div');
-      num.className = 'countdown-num' + (go ? ' countdown-go' : '');
-      num.textContent = text;
-      countdownEl.replaceChildren(num);
+    clearCdReadyWait();
+    cdReadyWait = {
+      expect: new Set(guestIds),
+      ready: new Set(),
+      timer: setTimeout(() => {
+        cdReadyWait = null;
+        if (matchPhase === 'countdown') runHostCountdown();
+      }, CD_READY_TIMEOUT_MS),
     };
+    for (const id of earlyCdReady) {
+      if (cdReadyWait.expect.has(id)) cdReadyWait.ready.add(id);
+    }
+    earlyCdReady.clear();
+    if (cdReadyWait.ready.size >= cdReadyWait.expect.size) {
+      clearCdReadyWait();
+      runHostCountdown();
+    }
+  }
+
+  function onCdReady(fromId) {
+    if (mode !== 'host') return;
+    if (!cdReadyWait) {
+      earlyCdReady.add(fromId);
+      return;
+    }
+    if (!cdReadyWait.expect.has(fromId)) return;
+    cdReadyWait.ready.add(fromId);
+    if (cdReadyWait.ready.size >= cdReadyWait.expect.size) {
+      clearCdReadyWait();
+      if (matchPhase === 'countdown') runHostCountdown();
+    }
+  }
+
+  // Host owns the beat clock and relays each number so every client advances together.
+  // Guests only display `cd` / start on `begin` — they never run their own countdown timers.
+  function runHostCountdown() {
+    clearCountdown();
+    clearCdReadyWait();
+    if (!countdownEl) {
+      broadcast({t: 'begin'});
+      scheduleHostBegin();
+      return;
+    }
+    // Fixed beats in multiplayer so host OS "reduce motion" cannot desync the room.
+    const networked = mode === 'host' && connections.size > 0;
+    const beat = (!networked && reduceMotion()) ? 420 : 900;
+    const goBeat = (!networked && reduceMotion()) ? 380 : 720;
+    const beats = ['3', '2', '1', 'go'];
+    let i = 0;
     const tick = () => {
       if (matchPhase !== 'countdown') return;
-      if (n >= 1) {
-        showBeat(String(n), false);
-        n -= 1;
+      if (i < beats.length) {
+        const v = beats[i++];
+        if (networked) broadcast({t: 'cd', v});
+        applyCountdownBeat(v);
         countdownTimer = setTimeout(() => {
           countdownTimer = 0;
           tick();
-        }, beat);
+        }, v === 'go' ? goBeat : beat);
         return;
       }
-      showBeat(t('go'), true);
-      countdownTimer = setTimeout(() => {
-        countdownTimer = 0;
-        if (matchPhase !== 'countdown') return;
-        clearCountdown();
-        onDone();
-      }, goBeat);
+      if (networked) broadcast({t: 'begin'});
+      scheduleHostBegin();
     };
     tick();
+  }
+
+  function scheduleHostBegin() {
+    const delay = (mode === 'host' && connections.size > 0) ? startLeadMs : 0;
+    countdownTimer = setTimeout(() => {
+      countdownTimer = 0;
+      if (matchPhase !== 'countdown') return;
+      finishCountdownToPlay();
+    }, delay);
+  }
+
+  function onCountdownBeat(v) {
+    if (v == null) return;
+    if (matchPhase !== 'countdown') {
+      queuedCdBeat = v;
+      return;
+    }
+    applyCountdownBeat(v);
+  }
+
+  function onCountdownBegin() {
+    if (matchPhase !== 'countdown' && matchPhase !== 'lobby' && matchPhase !== 'post') return;
+    // Late begin: if boards never mounted, ignore (should not happen after `go`)
+    if (matchPhase !== 'countdown') return;
+    finishCountdownToPlay();
   }
 
   function beginMatch() {
@@ -2352,6 +2448,7 @@
     pendingStart.timer = 0;
     // Compensate one-way latency of the `go` packet using measured start→ack RTT.
     const lead = Math.min(START_LEAD_MAX_MS, Math.max(START_LEAD_MIN_MS, maxRtt / 2 || START_LEAD_MIN_MS));
+    startLeadMs = lead;
     broadcast({t: 'go'});
     pendingStart.leadTimer = setTimeout(() => {
       pendingStart = null;
@@ -2366,6 +2463,16 @@
     pendingStart.players = pendingStart.players.filter(p => p.id !== peerId);
     if (!pendingStart.expect.size || pendingStart.acks.size >= pendingStart.expect.size) {
       finishHostStart();
+    }
+  }
+
+  function dropCdReadyPeer(peerId) {
+    if (!cdReadyWait) return;
+    cdReadyWait.expect.delete(peerId);
+    cdReadyWait.ready.delete(peerId);
+    if (!cdReadyWait.expect.size || cdReadyWait.ready.size >= cdReadyWait.expect.size) {
+      clearCdReadyWait();
+      if (matchPhase === 'countdown') runHostCountdown();
     }
   }
 
@@ -2410,15 +2517,21 @@
       hide(banner);
       hide(btnAgain);
       for (const b of boards) b.draw();
-      runCountdown(() => {
-        beginMatch();
-        const mine = boardById.get(myId);
-        if (mine) syncState(mine, true);
-      });
+      if (mode === 'host') {
+        armHostCountdown();
+      } else {
+        netSend({t: 'cdReady'});
+        if (queuedCdBeat != null) {
+          applyCountdownBeat(queuedCdBeat);
+          queuedCdBeat = null;
+        }
+      }
     };
 
-    if (!lobbyEl.hidden && !reduceMotion()) {
-      lobbyEl.classList.add('panel-exit');
+    const syncMount = mode === 'guest' || (mode === 'host' && connections.size > 0);
+    if (!lobbyEl.hidden && (syncMount || !reduceMotion())) {
+      if (!reduceMotion()) lobbyEl.classList.add('panel-exit');
+      // Same mount delay for every peer so the host does not start counting during guest lobby exit.
       window.setTimeout(mount, 380);
     } else {
       mount();
@@ -2475,6 +2588,10 @@
     }
     if (data.t === 'startAck') {
       onStartAck(fromId);
+      return;
+    }
+    if (data.t === 'cdReady') {
+      onCdReady(fromId);
       return;
     }
     if (data.t === 'ready') {
@@ -2576,6 +2693,14 @@
       startRemoteMatch(players);
       return;
     }
+    if (data.t === 'cd') {
+      onCountdownBeat(data.v);
+      return;
+    }
+    if (data.t === 'begin') {
+      onCountdownBegin();
+      return;
+    }
     if (data.t === 'state') {
       if (data.from === myId) return;
       const b = boardById.get(data.from);
@@ -2628,6 +2753,7 @@
         }
         return;
       }
+      if (cdReadyWait) dropCdReadyPeer(peerId);
       if (matchPhase === 'lobby') {
         roster = roster.filter(p => p.id !== peerId);
         roster.forEach(p => { p.ready = false; });
