@@ -51,6 +51,11 @@
   const TIME_LEVEL_MS = 30000; // level up every 30s of play, in addition to line-based leveling
   const MIN_DROP_MS = 120; // fastest possible drop interval, so it never becomes unplayable
   const DROP_SPEED = { slow: 1400, normal: 1000, fast: 400, turbo: 160 };
+  // Lock slide scales with gravity: ~28% of current dropMs, clamped for feel.
+  const LOCK_DELAY_RATIO = 0.28;
+  const MIN_LOCK_MS = 70;
+  const MAX_LOCK_MS = 350;
+  const LOCK_RESET_MAX = 15; // successful moves/rotates while grounded may refresh the window
   const GARBAGE_TARGET = { clockwise: 1, random: 1, neighbors: 1 };
   const POWER_GRACE_MS = 10000;
   const POWER_CHANCE = { 2: 0.12, 3: 0.25, 4: 0.40 };
@@ -595,6 +600,8 @@
       this.dropMs = DROP_SPEED[dropSpeed] || DROP_SPEED.normal;
       this.elapsed = 0;
       this.acc = 0;
+      this.lockAcc = 0;
+      this.lockResets = 0;
       this.over = false;
       this.gQueue = 0;
       this.combo = 0;
@@ -612,11 +619,34 @@
       const m = shape.m.map(r => r.slice());
       this.piece = {type, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: 0};
       this.canHold = true;
+      this.acc = 0;
+      this.lockAcc = 0;
+      this.lockResets = 0;
       if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
         this.over = true;
         if (this.els.over) this.els.over.textContent = t('topOut');
         onTopOut(this);
       }
+    }
+
+    grounded() {
+      return !!(this.piece && this.hits(this.piece.m, this.piece.x, this.piece.y + 1));
+    }
+
+    lockDelayMs() {
+      return Math.max(MIN_LOCK_MS, Math.min(MAX_LOCK_MS, Math.round(this.dropMs * LOCK_DELAY_RATIO)));
+    }
+
+    // Refresh lock window after a successful slide/kick while still on the floor.
+    bumpLockDelay() {
+      if (!this.grounded()) {
+        this.lockAcc = 0;
+        this.lockResets = 0;
+        return;
+      }
+      if (this.lockResets >= LOCK_RESET_MAX) return;
+      this.lockResets++;
+      this.lockAcc = 0;
     }
 
     hits(m, px, py) {
@@ -645,6 +675,9 @@
         const shape = SHAPES[swap];
         const m = shape.m.map(r => r.slice());
         this.piece = {type: swap, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: 0};
+        this.acc = 0;
+        this.lockAcc = 0;
+        this.lockResets = 0;
         if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
           this.over = true;
           if (this.els.over) this.els.over.textContent = t('topOut');
@@ -705,6 +738,7 @@
       if (!this.canPlay()) return;
       if (!this.hits(this.piece.m, this.piece.x + dx, this.piece.y)) {
         this.piece.x += dx;
+        this.bumpLockDelay();
         syncState(this);
       }
     }
@@ -716,6 +750,7 @@
         if (!this.hits(rm, this.piece.x + k, this.piece.y)) {
           this.piece.m = rm;
           this.piece.x += k;
+          this.bumpLockDelay();
           syncState(this);
           return;
         }
@@ -728,9 +763,12 @@
         this.piece.y++;
         this.score += 1;
         this.acc = 0;
+        this.lockAcc = 0;
+        if (!this.grounded()) this.lockResets = 0;
         this.paintHud();
         syncState(this);
-      } else this.lock();
+      }
+      // Already grounded: keep sliding — lock delay handles placement (hard drop still snaps).
     }
 
     hard() {
@@ -741,6 +779,8 @@
         d++;
       }
       this.score += d * 2;
+      this.lockAcc = 0;
+      this.lockResets = 0;
       this.lock();
     }
 
@@ -824,12 +864,22 @@
       this.elapsed += dt;
       if (this.updateSpeed()) this.paintHud();
       this.acc += dt;
-      if (this.acc < this.dropMs) return;
-      this.acc = 0;
-      if (!this.hits(this.piece.m, this.piece.x, this.piece.y + 1)) {
-        this.piece.y++;
-        syncState(this);
-      } else this.lock();
+      if (this.acc >= this.dropMs) {
+        this.acc = 0;
+        if (!this.grounded()) {
+          this.piece.y++;
+          this.lockAcc = 0;
+          this.lockResets = 0;
+          syncState(this);
+        }
+      }
+      if (this.grounded()) {
+        this.lockAcc += dt;
+        if (this.lockAcc >= this.lockDelayMs()) this.lock();
+      } else {
+        this.lockAcc = 0;
+        this.lockResets = 0;
+      }
     }
 
     updateSpeed() {
