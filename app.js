@@ -51,10 +51,11 @@
   const TIME_LEVEL_MS = 30000; // level up every 30s of play, in addition to line-based leveling
   const MIN_DROP_MS = 120; // fastest possible drop interval, so it never becomes unplayable
   const DROP_SPEED = { slow: 1400, normal: 1000, fast: 400, turbo: 160 };
-  // Lock slide scales with gravity: ~28% of current dropMs, clamped for feel.
-  const LOCK_DELAY_RATIO = 0.28;
-  const MIN_LOCK_MS = 70;
-  const MAX_LOCK_MS = 350;
+  // Lock slide scales with gravity: ~50% of current dropMs, with a floor so
+  // fast/turbo still allow a readable slide before lock.
+  const LOCK_DELAY_RATIO = 0.5;
+  const MIN_LOCK_MS = 200;
+  const MAX_LOCK_MS = 450;
   const LOCK_RESET_MAX = 15; // successful moves/rotates while grounded may refresh the window
   const GARBAGE_TARGET = { clockwise: 1, random: 1, neighbors: 1 };
   const POWER_GRACE_MS = 10000;
