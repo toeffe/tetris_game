@@ -406,6 +406,12 @@
   let running = false, ended = false, eliminated = false;
   let matchPhase = 'idle'; // idle | lobby | countdown | playing | post
   let last = 0, raf = 0, logicTimer = 0, countdownTimer = 0;
+  // Synced match start: host waits for guest acks, then fires `go` and delays
+  // its own countdown by ~RTT/2 so gravity does not begin a hop ahead of guests.
+  const START_ACK_TIMEOUT_MS = 2000;
+  const START_LEAD_MIN_MS = 40;
+  const START_LEAD_MAX_MS = 400;
+  let pendingStart = null; // host: {players, expect, acks, sentAt, maxRtt, timer} | guest: {players}
   const PEER_CONFIG = {
     config: {
       iceServers: [
@@ -1333,6 +1339,7 @@
   function showMenu() {
     stopLoop();
     clearCountdown();
+    clearPendingStart();
     closeNet();
     running = false;
     ended = false;
@@ -1353,6 +1360,12 @@
   }
 
   /* ---------- match lifecycle ---------- */
+  function clearPendingStart() {
+    if (pendingStart && pendingStart.timer) clearTimeout(pendingStart.timer);
+    if (pendingStart && pendingStart.leadTimer) clearTimeout(pendingStart.leadTimer);
+    pendingStart = null;
+  }
+
   function clearCountdown() {
     if (countdownTimer) {
       clearTimeout(countdownTimer);
@@ -2296,17 +2309,64 @@
   function tryHostStart() {
     if (mode !== 'host') return;
     if (matchPhase !== 'lobby' && matchPhase !== 'post') return;
+    if (pendingStart) return;
     if (roster.length < 1) return;
     if (!roster.every(p => p.ready)) return;
     const ids = roster.map(p => p.id);
-    broadcast({t: 'start', speedRamp: timeRampEnabled, dropSpeed, garbageTarget, powerUps: powerUpsEnabled, players: ids.map(id => {
+    const players = ids.map(id => {
       const p = roster.find(x => x.id === id);
       return {id, name: p.name};
-    })});
-    startRemoteMatch(ids.map(id => {
-      const p = roster.find(x => x.id === id);
-      return {id, name: p.name};
-    }));
+    });
+    const guestIds = ids.filter(id => id !== myId);
+    broadcast({t: 'start', speedRamp: timeRampEnabled, dropSpeed, garbageTarget, powerUps: powerUpsEnabled, players});
+    // Solo host: no peers to sync with.
+    if (!guestIds.length) {
+      startRemoteMatch(players);
+      return;
+    }
+    pendingStart = {
+      players,
+      expect: new Set(guestIds),
+      acks: new Set(),
+      sentAt: performance.now(),
+      maxRtt: 0,
+      timer: setTimeout(() => finishHostStart(), START_ACK_TIMEOUT_MS),
+      leadTimer: 0,
+    };
+  }
+
+  function onStartAck(fromId) {
+    if (mode !== 'host' || !pendingStart || !pendingStart.expect) return;
+    if (!pendingStart.expect.has(fromId) || pendingStart.acks.has(fromId)) return;
+    pendingStart.acks.add(fromId);
+    const rtt = performance.now() - pendingStart.sentAt;
+    if (rtt > pendingStart.maxRtt) pendingStart.maxRtt = rtt;
+    if (pendingStart.acks.size >= pendingStart.expect.size) finishHostStart();
+  }
+
+  function finishHostStart() {
+    if (mode !== 'host' || !pendingStart || !pendingStart.expect || pendingStart.goSent) return;
+    pendingStart.goSent = true;
+    const { players, maxRtt, timer } = pendingStart;
+    if (timer) clearTimeout(timer);
+    pendingStart.timer = 0;
+    // Compensate one-way latency of the `go` packet using measured start→ack RTT.
+    const lead = Math.min(START_LEAD_MAX_MS, Math.max(START_LEAD_MIN_MS, maxRtt / 2 || START_LEAD_MIN_MS));
+    broadcast({t: 'go'});
+    pendingStart.leadTimer = setTimeout(() => {
+      pendingStart = null;
+      startRemoteMatch(players);
+    }, lead);
+  }
+
+  function dropPendingStartPeer(peerId) {
+    if (!pendingStart || !pendingStart.expect) return;
+    pendingStart.expect.delete(peerId);
+    pendingStart.acks.delete(peerId);
+    pendingStart.players = pendingStart.players.filter(p => p.id !== peerId);
+    if (!pendingStart.expect.size || pendingStart.acks.size >= pendingStart.expect.size) {
+      finishHostStart();
+    }
   }
 
   function startRemoteMatch(players) {
@@ -2373,7 +2433,7 @@
     }
     if (matchPhase === 'post') touchPostSeen(fromId);
     if (data.t === 'hello') {
-      if (matchPhase === 'playing' || (matchPhase !== 'lobby' && matchPhase !== 'post')) {
+      if (pendingStart || matchPhase === 'playing' || matchPhase === 'countdown' || (matchPhase !== 'lobby' && matchPhase !== 'post')) {
         sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
         connections.get(fromId)?.close();
         connections.delete(fromId);
@@ -2381,7 +2441,7 @@
       }
       const existing = roster.find(p => p.id === fromId);
       if (!existing) {
-        if (matchPhase !== 'lobby') {
+        if (matchPhase !== 'lobby' || pendingStart) {
           sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
           connections.get(fromId)?.close();
           connections.delete(fromId);
@@ -2411,6 +2471,10 @@
       p.name = sanitizeName(data.name);
       p.ready = false;
       broadcastRoster();
+      return;
+    }
+    if (data.t === 'startAck') {
+      onStartAck(fromId);
       return;
     }
     if (data.t === 'ready') {
@@ -2499,7 +2563,17 @@
       dropSpeed = DROP_SPEED[data.dropSpeed] ? data.dropSpeed : 'normal';
       garbageTarget = GARBAGE_TARGET[data.garbageTarget] ? data.garbageTarget : 'clockwise';
       powerUpsEnabled = !!data.powerUps;
-      startRemoteMatch(data.players || []);
+      // Ack first so the host can schedule a shared `go`; do not start countdown yet.
+      clearPendingStart();
+      pendingStart = { players: data.players || [] };
+      netSend({t: 'startAck'});
+      return;
+    }
+    if (data.t === 'go') {
+      const players = (pendingStart && pendingStart.players) || [];
+      clearPendingStart();
+      if (!players.length) return;
+      startRemoteMatch(players);
       return;
     }
     if (data.t === 'state') {
@@ -2543,6 +2617,17 @@
     c.on('close', () => {
       if (suppressNetClose) return;
       connections.delete(peerId);
+      if (pendingStart) {
+        dropPendingStartPeer(peerId);
+        if (matchPhase === 'lobby') {
+          roster = roster.filter(p => p.id !== peerId);
+          // Keep remaining ready state; start handshake already in flight.
+          broadcastRoster();
+        } else if (matchPhase === 'post') {
+          removePostPeer(peerId);
+        }
+        return;
+      }
       if (matchPhase === 'lobby') {
         roster = roster.filter(p => p.id !== peerId);
         roster.forEach(p => { p.ready = false; });
@@ -2569,6 +2654,7 @@
     c.on('close', () => {
       if (suppressNetClose || mode !== 'guest') return;
       if (guestConn !== c) return; // ignore stale close from a replaced connection
+      clearPendingStart();
       if (migratePhase === 'reconnecting') {
         scheduleGuestReconnect(migrateAttempt + 1);
         return;
