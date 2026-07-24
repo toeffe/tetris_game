@@ -73,13 +73,19 @@
         <option value="neighbors" data-i18n="targetNeighbors">Only left or right</option>
       </select>
     </label>
-    <label id="speedRampRow" class="toggle-row" hidden>
-      <input id="chkSpeedRamp" type="checkbox" checked>
+    <label id="speedRampRow" class="setting-row" hidden>
       <span data-i18n="speedRamp">Speed increases over time</span>
+      <select id="selSpeedRamp">
+        <option value="on" data-i18n="optOn" selected>On</option>
+        <option value="off" data-i18n="optOff">Off</option>
+      </select>
     </label>
-    <label id="powerUpsRow" class="toggle-row" hidden>
-      <input id="chkPowerUps" type="checkbox">
+    <label id="powerUpsRow" class="setting-row" hidden>
       <span data-i18n="powerUps">Relics (power-ups)</span>
+      <select id="selPowerUps">
+        <option value="off" data-i18n="optOff" selected>Off</option>
+        <option value="on" data-i18n="optOn">On</option>
+      </select>
     </label>
     <button id="btnReady" type="button" data-i18n="ready">Ready</button>
     <button id="btnLobbyLeave" class="secondary" type="button" data-i18n="leave">Leave</button>

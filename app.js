@@ -91,6 +91,8 @@
       unready: 'Unready',
       speedRamp: 'Speed increases over time',
       powerUps: 'Relics (power-ups)',
+      optOn: 'On',
+      optOff: 'Off',
       dropSpeed: 'Drop speed',
       dropSlow: 'Slow',
       dropNormal: 'Normal',
@@ -139,6 +141,7 @@
       needTwo: ' · need at least 1',
       waitReady: ' · waiting for ready',
       startingSoon: ' · starting…',
+      go: 'FIGHT!',
       ctrlHint: 'WASD / arrows + space · C keep · V relic · last survivor wins',
       rematchStart: 'Starting…',
       rematchWait: 'Waiting for others ({ready}/{n})…',
@@ -178,6 +181,8 @@
       unready: 'Ikke klar',
       speedRamp: 'Hastighed øges over tid',
       powerUps: 'Relikvier (power-ups)',
+      optOn: 'Til',
+      optOff: 'Fra',
       dropSpeed: 'Faldhastighed',
       dropSlow: 'Langsom',
       dropNormal: 'Normal',
@@ -226,6 +231,7 @@
       needTwo: ' · mindst 1 spiller',
       waitReady: ' · venter på klar',
       startingSoon: ' · starter…',
+      go: 'KÆMP!',
       ctrlHint: 'WASD / piletaster + mellemrum · C gem · V relikvie · sidste overlevende vinder',
       rematchStart: 'Starter…',
       rematchWait: 'Venter på de andre ({ready}/{n})…',
@@ -359,8 +365,8 @@
   const banner = $('banner'), btnAgain = $('btnAgain'), boardsEl = $('boards');
   const countdownEl = $('countdown');
   const rosterList = $('rosterList'), btnReady = $('btnReady');
-  const speedRampRow = $('speedRampRow'), chkSpeedRamp = $('chkSpeedRamp');
-  const powerUpsRow = $('powerUpsRow'), chkPowerUps = $('chkPowerUps');
+  const speedRampRow = $('speedRampRow'), selSpeedRamp = $('selSpeedRamp');
+  const powerUpsRow = $('powerUpsRow'), selPowerUps = $('selPowerUps');
   const dropSpeedRow = $('dropSpeedRow'), selDropSpeed = $('selDropSpeed');
   const garbageTargetRow = $('garbageTargetRow'), selGarbageTarget = $('selGarbageTarget');
   const menuName = $('menuName'), lobbyName = $('lobbyName');
@@ -1293,17 +1299,18 @@
     hide(gameEl);
     hide(banner);
     setPlayLayout(false);
+    gameEl.classList.remove('game-entering');
     show(lobbyEl);
     matchPhase = 'lobby';
     $('lobbyCode').textContent = roomCode || '·····';
     lobbyName.value = getPlayerName();
     if (mode === 'host') {
       show(speedRampRow);
-      chkSpeedRamp.checked = timeRampEnabled;
-      chkSpeedRamp.disabled = false;
+      selSpeedRamp.value = timeRampEnabled ? 'on' : 'off';
+      selSpeedRamp.disabled = false;
       show(powerUpsRow);
-      chkPowerUps.checked = powerUpsEnabled;
-      chkPowerUps.disabled = false;
+      selPowerUps.value = powerUpsEnabled ? 'on' : 'off';
+      selPowerUps.disabled = false;
       show(dropSpeedRow);
       selDropSpeed.value = DROP_SPEED[dropSpeed] ? dropSpeed : 'normal';
       selDropSpeed.disabled = false;
@@ -1315,8 +1322,8 @@
       hide(powerUpsRow);
       hide(dropSpeedRow);
       hide(garbageTargetRow);
-      chkSpeedRamp.disabled = true;
-      chkPowerUps.disabled = true;
+      selSpeedRamp.disabled = true;
+      selPowerUps.disabled = true;
       selDropSpeed.disabled = true;
       selGarbageTarget.disabled = true;
     }
@@ -1334,6 +1341,7 @@
     roster = [];
     clearBoards();
     setPlayLayout(false);
+    gameEl.classList.remove('game-entering');
     hide(gameEl);
     hide(netPanel);
     hide(lobbyEl);
@@ -1356,31 +1364,44 @@
     }
   }
 
+  function reduceMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
   function runCountdown(onDone) {
     clearCountdown();
     if (!countdownEl) {
       onDone();
       return;
     }
+    const beat = reduceMotion() ? 420 : 900;
+    const goBeat = reduceMotion() ? 380 : 720;
     let n = 3;
-    const tick = () => {
-      if (matchPhase !== 'countdown') return;
+    const showBeat = (text, go) => {
       countdownEl.hidden = false;
       const num = document.createElement('div');
-      num.className = 'countdown-num';
-      num.textContent = String(n);
+      num.className = 'countdown-num' + (go ? ' countdown-go' : '');
+      num.textContent = text;
       countdownEl.replaceChildren(num);
-      if (n <= 1) {
+    };
+    const tick = () => {
+      if (matchPhase !== 'countdown') return;
+      if (n >= 1) {
+        showBeat(String(n), false);
+        n -= 1;
         countdownTimer = setTimeout(() => {
           countdownTimer = 0;
-          if (matchPhase !== 'countdown') return;
-          clearCountdown();
-          onDone();
-        }, 1000);
+          tick();
+        }, beat);
         return;
       }
-      n -= 1;
-      countdownTimer = setTimeout(tick, 1000);
+      showBeat(t('go'), true);
+      countdownTimer = setTimeout(() => {
+        countdownTimer = 0;
+        if (matchPhase !== 'countdown') return;
+        clearCountdown();
+        onDone();
+      }, goBeat);
     };
     tick();
   }
@@ -1393,6 +1414,7 @@
     resetHeldKeys();
     hide(banner);
     hide(btnAgain);
+    gameEl.classList.remove('game-entering');
     btnAgain.disabled = false;
     btnAgain.textContent = t('playAgain');
     roster.forEach(p => { p.ready = false; });
@@ -2288,48 +2310,59 @@
   }
 
   function startRemoteMatch(players) {
-    hide(lobbyEl);
-    hide(netPanel);
-    show(gameEl);
-    setPlayLayout(true);
-    $('padTag0').textContent = getPlayerName();
-    $('ctrlHint').textContent = t('ctrlHint');
-    clearBoards();
-    const n = players.length;
-    const me = players.find(p => p.id === myId);
-    const others = players.filter(p => p.id !== myId);
+    const mount = () => {
+      hide(lobbyEl);
+      hide(netPanel);
+      lobbyEl.classList.remove('panel-exit');
+      show(gameEl);
+      setPlayLayout(true);
+      gameEl.classList.add('game-entering');
+      $('padTag0').textContent = getPlayerName();
+      $('ctrlHint').textContent = t('ctrlHint');
+      clearBoards();
+      const n = players.length;
+      const me = players.find(p => p.id === myId);
+      const others = players.filter(p => p.id !== myId);
 
-    // Local board always sits in the center column; opponents fill side rails
-    // so extra players never shift your well off the room's middle.
-    if (others.length) {
-      boardsEl.classList.add('multi');
-      const left = document.createElement('div');
-      left.className = 'opps opps-left';
-      const right = document.createElement('div');
-      right.className = 'opps opps-right';
-      const mid = Math.floor(others.length / 2);
-      const leftPlayers = others.slice(0, mid);
-      const rightPlayers = others.slice(mid);
-      boardsEl.appendChild(left);
-      if (me) createBoardSlot(me.id, me.name, true, true, n, boardsEl);
-      boardsEl.appendChild(right);
-      leftPlayers.forEach(p => createBoardSlot(p.id, p.name, false, false, n, left));
-      rightPlayers.forEach(p => createBoardSlot(p.id, p.name, false, false, n, right));
-    } else if (me) {
-      createBoardSlot(me.id, me.name, true, true, n, boardsEl);
+      // Local board always sits in the center column; opponents fill side rails
+      // so extra players never shift your well off the room's middle.
+      if (others.length) {
+        boardsEl.classList.add('multi');
+        const left = document.createElement('div');
+        left.className = 'opps opps-left';
+        const right = document.createElement('div');
+        right.className = 'opps opps-right';
+        const mid = Math.floor(others.length / 2);
+        const leftPlayers = others.slice(0, mid);
+        const rightPlayers = others.slice(mid);
+        boardsEl.appendChild(left);
+        if (me) createBoardSlot(me.id, me.name, true, true, n, boardsEl);
+        boardsEl.appendChild(right);
+        leftPlayers.forEach(p => createBoardSlot(p.id, p.name, false, false, n, left));
+        rightPlayers.forEach(p => createBoardSlot(p.id, p.name, false, false, n, right));
+      } else if (me) {
+        createBoardSlot(me.id, me.name, true, true, n, boardsEl);
+      }
+
+      roster = players.map(p => ({id: p.id, name: p.name, ready: false, alive: true}));
+      matchPhase = 'countdown';
+      stopPostHeartbeat();
+      hide(banner);
+      hide(btnAgain);
+      for (const b of boards) b.draw();
+      runCountdown(() => {
+        beginMatch();
+        const mine = boardById.get(myId);
+        if (mine) syncState(mine, true);
+      });
+    };
+
+    if (!lobbyEl.hidden && !reduceMotion()) {
+      lobbyEl.classList.add('panel-exit');
+      window.setTimeout(mount, 380);
+    } else {
+      mount();
     }
-
-    roster = players.map(p => ({id: p.id, name: p.name, ready: false, alive: true}));
-    matchPhase = 'countdown';
-    stopPostHeartbeat();
-    hide(banner);
-    hide(btnAgain);
-    for (const b of boards) b.draw();
-    runCountdown(() => {
-      beginMatch();
-      const mine = boardById.get(myId);
-      if (mine) syncState(mine, true);
-    });
   }
 
   function onHostData(fromId, data) {
@@ -2855,11 +2888,11 @@
   $('btnLobbyLeave').onclick = showMenu;
   $('btnNetGo').onclick = joinRoom;
   $('btnReady').onclick = toggleReady;
-  chkSpeedRamp.addEventListener('change', () => {
-    if (mode === 'host') timeRampEnabled = chkSpeedRamp.checked;
+  selSpeedRamp.addEventListener('change', () => {
+    if (mode === 'host') timeRampEnabled = selSpeedRamp.value === 'on';
   });
-  chkPowerUps.addEventListener('change', () => {
-    if (mode === 'host') powerUpsEnabled = chkPowerUps.checked;
+  selPowerUps.addEventListener('change', () => {
+    if (mode === 'host') powerUpsEnabled = selPowerUps.value === 'on';
   });
   selDropSpeed.addEventListener('change', () => {
     if (mode === 'host' && DROP_SPEED[selDropSpeed.value]) dropSpeed = selDropSpeed.value;
