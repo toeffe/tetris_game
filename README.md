@@ -2,7 +2,7 @@
 
 # VibeTrisimo
 
-A browser-based multiplayer Tetris battle with a medieval stone-and-torch look. Host a room, share a 5-character code, and fight until one player remains.
+A browser-based multiplayer Tetris battle with a dark fantasy dungeon look. Host a room, share a 5-character code, and fight until one player remains.
 
 **Play:** [tetris.toeffe.uk](https://tetris.toeffe.uk)
 
@@ -15,6 +15,7 @@ A browser-based multiplayer Tetris battle with a medieval stone-and-torch look. 
 - **Drop speed** — host picks Slow / Normal / Fast / Turbo before the match
 - **Garbage targeting** — host picks who receives attacks (next in line, anyone, or left/right only)
 - **Speed ramp** — optional host setting that levels up over time as well as by lines cleared
+- **Relics (power-ups)** — optional host setting; clear Doubles+ for a chance at Quake, Torch, Shield, or Curse (`V` / Use)
 - **Clear / combo FX** — callouts plus optional confetti, glitter, embers, and fireworks (FX toggle next to the language buttons; preference is remembered)
 - **Host succession** — if the host leaves in the lobby or rematch screen, the next player takes over and others reconnect
 - **Rematch lobby** — everyone clicks Play again to start the next match
@@ -40,6 +41,7 @@ Solo hosting (one ready player) is allowed if you just want a practice board. Ne
 | Rotate        | `W` / `↑`    | ↻         |
 | Hard drop     | `Space`      | ⬇         |
 | Hold (Keep)   | `C`          | Keep      |
+| Use relic     | `V`          | Use       |
 
 Held left/right and soft drop use DAS/ARR-style repeat (160 ms delay, then 50 ms / 40 ms) so movement feels responsive on keyboard. Rotation uses simple wall kicks (±1 / ±2 columns).
 
@@ -61,6 +63,17 @@ Garbage targeting is chosen by the host:
 | Only left or right | Random between the alive players on either side in the circle |
 
 Incoming rows have one random gap. Combos are visual only (callouts / FX) and do not add extra garbage. Last player still alive wins; if everyone tops out together, it’s a draw. Boards also track a classic score for the HUD, but survival decides the winner.
+
+### Relics
+
+When the host enables **Relics (power-ups)**, clearing a Double / Triple / Tetris after the first 10 seconds can grant one held relic (empty slot only). Chance: 12% / 25% / 40%, plus 10% if combo ≥ 3. Activate with `V` or **Use**. Attacks use the same targeting as garbage.
+
+| Relic | Effect |
+|-------|--------|
+| Quake | Clear the bottom row on your board |
+| Torch | Target’s gravity ×2 for 8 seconds |
+| Shield | Cancel the next 2 garbage rows (cap 3) |
+| Curse | Clear the target’s hold piece |
 
 ### Leveling
 
@@ -93,14 +106,20 @@ One player **hosts**. Guests connect to the host; the host relays roster, start,
 tetris_game/
 ├── index.html              # Shell: menu, lobby, boards, touch pads
 ├── app.js                  # Tetris logic, lobby, PeerJS networking, i18n
-├── styles.css              # Stone / parchment / torch theme
+├── styles.css              # Fantasy lobby / dungeon theme
 ├── peerjs.min.js           # Vendored PeerJS
 ├── favicon.ico / .png      # Browser icons
 ├── CNAME                   # GitHub Pages custom domain
 ├── LICENSE                 # MIT
 ├── README.md
 ├── fonts/                  # Cinzel / Cinzel Decorative (woff2)
-└── textures/               # SVG fills + banner
+├── tools/                  # Asset helpers (e.g. block slicer)
+└── textures/               # Art + SVG fills
+    ├── lobbyHQ.webp        # Pre-game room (HQ)
+    ├── gameHQ.webp         # In-match room (HQ)
+    ├── ui-panel.png        # Panel / button style reference
+    ├── blocks.png          # Tetromino source sheet
+    ├── blocks/             # Per-type cell sprites (I O T L J S Z)
     ├── stone.svg
     ├── wood.svg
     ├── parchment.svg

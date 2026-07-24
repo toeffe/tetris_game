@@ -30,7 +30,7 @@
   <h1 class="title">VibeTrisimo</h1>
   <p class="subtitle" data-i18n="subtitle">Tetris battle</p>
 
-  <div id="menu" class="panel">
+  <div id="menu" class="panel stone-tablet">
     <span class="panel-corners" aria-hidden="true"></span>
     <input id="menuName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" data-i18n-aria="yourName" placeholder="Name" aria-label="Your name">
     <button id="btnHost" data-i18n="hostGame">Host game</button>
@@ -38,7 +38,7 @@
     <p class="hint" data-i18n="menuHint">Up to 8 players.</p>
   </div>
 
-  <div id="netPanel" class="panel" hidden>
+  <div id="netPanel" class="panel stone-tablet" hidden>
     <span class="panel-corners" aria-hidden="true"></span>
     <p id="netLabel" class="hint"></p>
     <div id="roomCode" class="room-code" hidden>·····</div>
@@ -49,7 +49,7 @@
     <button id="btnNetBack" class="secondary" type="button" data-i18n="back">Back</button>
   </div>
 
-  <div id="lobby" class="panel" hidden>
+  <div id="lobby" class="panel stone-tablet" hidden>
     <span class="panel-corners" aria-hidden="true"></span>
     <div id="lobbyCode" class="room-code" data-i18n-aria="roomCode" aria-label="Room code">·····</div>
     <button id="btnCopyLobby" type="button" data-i18n="copyCode">Copy code</button>
@@ -77,6 +77,10 @@
       <input id="chkSpeedRamp" type="checkbox" checked>
       <span data-i18n="speedRamp">Speed increases over time</span>
     </label>
+    <label id="powerUpsRow" class="toggle-row" hidden>
+      <input id="chkPowerUps" type="checkbox">
+      <span data-i18n="powerUps">Relics (power-ups)</span>
+    </label>
     <button id="btnReady" type="button" data-i18n="ready">Ready</button>
     <button id="btnLobbyLeave" class="secondary" type="button" data-i18n="leave">Leave</button>
   </div>
@@ -97,6 +101,7 @@
           <button type="button" data-act="soft">▼</button>
           <button type="button" data-act="hard">⬇</button>
           <button type="button" data-act="hold" data-i18n="hold">Keep</button>
+          <button type="button" data-act="power" data-i18n="useRelic">Use</button>
         </div>
       </div>
     </div>

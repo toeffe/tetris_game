@@ -3,21 +3,63 @@
   const COLS = 10, ROWS = 20;
   const MAX_PLAYERS = 8;
   const TYPES = ['I','O','T','S','Z','J','L'];
+  const GARBAGE_TYPE = 'G';
   const GARBAGE_COLOR = '#4a453f';
   const SHAPES = {
-    I:{color:'#5a9e9a',m:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]]},
-    O:{color:'#c9a227',m:[[1,1],[1,1]]},
-    T:{color:'#7a5a8a',m:[[0,1,0],[1,1,1],[0,0,0]]},
-    S:{color:'#4a7a4a',m:[[0,1,1],[1,1,0],[0,0,0]]},
-    Z:{color:'#8b2e2e',m:[[1,1,0],[0,1,1],[0,0,0]]},
-    J:{color:'#3a5a7a',m:[[1,0,0],[1,1,1],[0,0,0]]},
-    L:{color:'#b87333',m:[[0,0,1],[1,1,1],[0,0,0]]},
+    I:{color:'#2f98a6',m:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]]},
+    O:{color:'#d4a03c',m:[[1,1],[1,1]]},
+    T:{color:'#8a42aa',m:[[0,1,0],[1,1,1],[0,0,0]]},
+    S:{color:'#6d9d3c',m:[[0,1,1],[1,1,0],[0,0,0]]},
+    Z:{color:'#c23a42',m:[[1,1,0],[0,1,1],[0,0,0]]},
+    J:{color:'#3a6cb0',m:[[1,0,0],[1,1,1],[0,0,0]]},
+    L:{color:'#c87a2a',m:[[0,0,1],[1,1,1],[0,0,0]]},
   };
+  const COLOR_TO_TYPE = Object.fromEntries([
+    ...TYPES.map(t => [SHAPES[t].color, t]),
+    [GARBAGE_COLOR, GARBAGE_TYPE],
+    // Legacy muted palette (pre-revamp sync / saved state)
+    ['#5a9e9a', 'I'], ['#c9a227', 'O'], ['#7a5a8a', 'T'],
+    ['#4a7a4a', 'S'], ['#8b2e2e', 'Z'], ['#3a5a7a', 'J'], ['#b87333', 'L'],
+  ]);
+  const BLOCK_IMGS = Object.create(null);
+  let blocksReady = false;
+  function preloadBlockSprites() {
+    let left = TYPES.length;
+    TYPES.forEach(t => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = img.onerror = () => {
+        left -= 1;
+        if (left <= 0) blocksReady = true;
+      };
+      img.src = `./textures/blocks/${t}.png`;
+      BLOCK_IMGS[t] = img;
+    });
+  }
+  preloadBlockSprites();
+
+  function cellType(cell) {
+    if (!cell) return null;
+    if (typeof cell === 'string') {
+      if (SHAPES[cell] || cell === GARBAGE_TYPE) return cell;
+      return COLOR_TO_TYPE[cell] || null;
+    }
+    if (typeof cell === 'object' && cell.type) return cell.type;
+    return null;
+  }
   const GARBAGE = {1:0,2:1,3:2,4:4};
   const TIME_LEVEL_MS = 30000; // level up every 30s of play, in addition to line-based leveling
   const MIN_DROP_MS = 120; // fastest possible drop interval, so it never becomes unplayable
   const DROP_SPEED = { slow: 1400, normal: 1000, fast: 400, turbo: 160 };
   const GARBAGE_TARGET = { clockwise: 1, random: 1, neighbors: 1 };
+  const POWER_GRACE_MS = 10000;
+  const POWER_CHANCE = { 2: 0.12, 3: 0.25, 4: 0.40 };
+  const POWER_COMBO_BONUS = 0.10;
+  const POWER_KINDS = ['quake', 'torch', 'shield', 'curse'];
+  const POWER_KIND = { quake: 1, torch: 1, shield: 1, curse: 1 };
+  const TORCH_MS = 8000;
+  const SHIELD_GAIN = 2;
+  const SHIELD_CAP = 3;
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const NAME_KEY = 'vibetrisimo-name';
   const LANG_KEY = 'vibetrisimo-lang';
@@ -30,7 +72,7 @@
   function storageSet(key, value) {
     try { localStorage.setItem(key, value); } catch (_) {}
   }
-  const FX_COLORS = ['#d4af37', '#c9a227', '#e8d9b5', '#8b1a1a', '#a84848', '#5a9e9a', '#4a7a4a', '#7a5a8a', '#b87333', '#f0e0a0'];
+  const FX_COLORS = ['#d4af37', '#c9a227', '#e8d9b5', '#8b1a1a', '#a84848', '#2f98a6', '#6d9d3c', '#8a42aa', '#c87a2a', '#f0e0a0', '#3a6cb0', '#c23a42'];
 
   const STR = {
     en: {
@@ -48,6 +90,7 @@
       ready: 'Ready',
       unready: 'Unready',
       speedRamp: 'Speed increases over time',
+      powerUps: 'Relics (power-ups)',
       dropSpeed: 'Drop speed',
       dropSlow: 'Slow',
       dropNormal: 'Normal',
@@ -72,6 +115,19 @@
       waiting: 'Waiting',
       next: 'Next',
       hold: 'Keep',
+      relic: 'Relic',
+      useRelic: 'Use',
+      powerEmpty: '—',
+      relicQuake: 'Quake',
+      relicTorch: 'Torch',
+      relicShield: 'Shield',
+      relicCurse: 'Curse',
+      powerGranted: '{name}!',
+      powerQuakeFx: 'QUAKE!',
+      powerTorchFx: 'TORCH!',
+      powerShieldFx: 'SHIELD!',
+      powerCurseFx: 'CURSE!',
+      shieldAbsorb: 'SHIELD!',
       meta: 'LV {lv} · {lines} lines',
       defaultName: 'Player',
       topOut: 'TOP OUT',
@@ -83,7 +139,7 @@
       needTwo: ' · need at least 1',
       waitReady: ' · waiting for ready',
       startingSoon: ' · starting…',
-      ctrlHint: 'WASD / arrows + space · C keep · last survivor wins',
+      ctrlHint: 'WASD / arrows + space · C keep · V relic · last survivor wins',
       rematchStart: 'Starting…',
       rematchWait: 'Waiting for others ({ready}/{n})…',
       rematchPartial: '{ready}/{n} ready',
@@ -121,6 +177,7 @@
       ready: 'Klar',
       unready: 'Ikke klar',
       speedRamp: 'Hastighed øges over tid',
+      powerUps: 'Relikvier (power-ups)',
       dropSpeed: 'Faldhastighed',
       dropSlow: 'Langsom',
       dropNormal: 'Normal',
@@ -145,6 +202,19 @@
       waiting: 'Venter',
       next: 'Næste',
       hold: 'Gem',
+      relic: 'Relikvie',
+      useRelic: 'Brug',
+      powerEmpty: '—',
+      relicQuake: 'Jordskælv',
+      relicTorch: 'Fakkel',
+      relicShield: 'Skjold',
+      relicCurse: 'Forbandelse',
+      powerGranted: '{name}!',
+      powerQuakeFx: 'JORDSKÆLV!',
+      powerTorchFx: 'FAKKEL!',
+      powerShieldFx: 'SKJOLD!',
+      powerCurseFx: 'FORBANDELSE!',
+      shieldAbsorb: 'SKJOLD!',
       meta: 'NIV {lv} · {lines} linjer',
       defaultName: 'Spiller',
       topOut: 'TOPPET UD',
@@ -156,7 +226,7 @@
       needTwo: ' · mindst 1 spiller',
       waitReady: ' · venter på klar',
       startingSoon: ' · starter…',
-      ctrlHint: 'WASD / piletaster + mellemrum · C gem · sidste overlevende vinder',
+      ctrlHint: 'WASD / piletaster + mellemrum · C gem · V relikvie · sidste overlevende vinder',
       rematchStart: 'Starter…',
       rematchWait: 'Venter på de andre ({ready}/{n})…',
       rematchPartial: '{ready}/{n} klar',
@@ -269,6 +339,7 @@
     boards.forEach(b => {
       if (b.els && b.els.miniLabel) b.els.miniLabel.textContent = t('next');
       if (b.els && b.els.holdLabel) b.els.holdLabel.textContent = t('hold');
+      if (b.els && b.els.powerLabel) b.els.powerLabel.textContent = t('relic');
       if (b.els && b.els.meta) {
         const lv = b.els.level ? b.els.level.textContent : '1';
         const ln = b.els.lines ? b.els.lines.textContent : '0';
@@ -279,6 +350,7 @@
       if (b.over && b.els && b.els.over) {
         b.els.over.textContent = b.live && eliminated ? t('eliminated') : t('topOut');
       }
+      if (typeof b.paintHud === 'function') b.paintHud();
     });
   }
 
@@ -288,6 +360,7 @@
   const countdownEl = $('countdown');
   const rosterList = $('rosterList'), btnReady = $('btnReady');
   const speedRampRow = $('speedRampRow'), chkSpeedRamp = $('chkSpeedRamp');
+  const powerUpsRow = $('powerUpsRow'), chkPowerUps = $('chkPowerUps');
   const dropSpeedRow = $('dropSpeedRow'), selDropSpeed = $('selDropSpeed');
   const garbageTargetRow = $('garbageTargetRow'), selGarbageTarget = $('selGarbageTarget');
   const menuName = $('menuName'), lobbyName = $('lobbyName');
@@ -353,6 +426,7 @@
   let timeRampEnabled = true; // host-controlled match setting
   let dropSpeed = 'normal'; // host-controlled base drop speed preset
   let garbageTarget = 'clockwise'; // host-controlled garbage targeting
+  let powerUpsEnabled = false; // host-controlled relics / power-ups
   let myId = null;
   let hostPlayerId = null; // player id of current relay host (may differ from roomCode after migration)
   let roster = []; // {id, name, ready, alive}
@@ -362,6 +436,12 @@
   let migratePhase = null; // null | 'taking' | 'reconnecting'
   let migrateTimer = null;
   let migrateAttempt = 0;
+  // Post-match only: detect departed peers without waiting on slow WebRTC close.
+  // Not used during play so idle/eliminated players are not kicked mid-match.
+  const POST_HB_MS = 1000;
+  const POST_HB_TIMEOUT_MS = 4000;
+  let postHbTimer = 0;
+  let postLastSeen = new Map(); // peerId -> performance.now()
 
   function rotate(m) {
     const n = m.length, out = Array.from({length:n}, () => Array(n).fill(0));
@@ -394,13 +474,26 @@
     return ((x * 17 + y * 31) & 7) / 40;
   }
 
-  function drawBlock(ctx, x, y, color, size, opts) {
+  function drawBlock(ctx, x, y, cell, size, opts) {
     const ghost = opts && opts.ghost;
-    const iron = color === GARBAGE_COLOR;
-    const gap = Math.max(1, (size * .08) | 0);
+    const type = cellType(cell) || (typeof cell === 'string' && cell.charAt(0) === '#' ? null : cell);
+    const iron = type === GARBAGE_TYPE || cell === GARBAGE_COLOR;
+    const gap = Math.max(1, (size * .06) | 0);
     const px = x * size + gap, py = y * size + gap;
     const w = size - gap * 2, h = size - gap * 2;
     if (w < 2 || h < 2) return;
+
+    const img = !iron && type && BLOCK_IMGS[type];
+    if (img && img.complete && img.naturalWidth > 0) {
+      const prev = ctx.globalAlpha;
+      if (ghost) ctx.globalAlpha = prev * 0.38;
+      ctx.drawImage(img, px, py, w, h);
+      ctx.globalAlpha = prev;
+      return;
+    }
+
+    // Fallback: procedural bevel (also used for garbage / unloaded sprites)
+    const color = iron ? GARBAGE_COLOR : (SHAPES[type] && SHAPES[type].color) || (typeof cell === 'string' ? cell : '#888');
     const rgb = hexToRgb(color);
     const g = grit(x, y);
     const face = ghost ? shadeRgb(rgb, .55 + g) : shadeRgb(rgb, .92 + g);
@@ -436,10 +529,15 @@
     if (!type) return;
     const m = SHAPES[type].m, n = m.length, bs = Math.max(8, (size / n) | 0) - 2;
     const ox = (size - n * (bs + 2)) / 2, oy = (size - n * (bs + 2)) / 2;
-    const color = SHAPES[type].color;
     for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
       if (!m[r][c]) continue;
       const px = ox + c * (bs + 2), py = oy + r * (bs + 2);
+      const img = BLOCK_IMGS[type];
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, px, py, bs, bs);
+        continue;
+      }
+      const color = SHAPES[type].color;
       const rgb = hexToRgb(color);
       ctx.fillStyle = shadeRgb(rgb, .4);
       ctx.fillRect(px, py, bs, bs);
@@ -471,6 +569,9 @@
       this.next = bagPiece(this.bag);
       this.holdType = null;
       this.canHold = true;
+      this.powerUp = null;
+      this.shieldLeft = 0;
+      this.torchUntil = 0;
       this.score = 0;
       this.lines = 0;
       this.level = 1;
@@ -538,6 +639,51 @@
       syncState(this, true);
     }
 
+    usePower() {
+      if (!this.canPlay() || !powerUpsEnabled || !this.powerUp) return;
+      const kind = this.powerUp;
+      if (!POWER_KIND[kind]) return;
+      this.powerUp = null;
+      this.paintHud();
+      if (kind === 'quake') {
+        this.applyQuake();
+        netSend({t: 'power', kind, from: this.playerId, self: true});
+        syncState(this, true);
+      } else if (kind === 'shield') {
+        this.applyShield();
+        netSend({t: 'power', kind, from: this.playerId, self: true});
+        syncState(this, true);
+      } else {
+        netSend({t: 'power', kind, from: this.playerId});
+      }
+    }
+
+    applyQuake() {
+      this.grid.pop();
+      this.grid.unshift(Array(COLS).fill(null));
+      this.flashUntil = performance.now() + 200;
+      this.flashKind = 'clear';
+      this.paintHud();
+    }
+
+    applyShield() {
+      this.shieldLeft = Math.min(SHIELD_CAP, this.shieldLeft + SHIELD_GAIN);
+      this.paintHud();
+    }
+
+    applyTorch() {
+      this.torchUntil = performance.now() + TORCH_MS;
+      this.updateSpeed();
+      this.paintHud();
+    }
+
+    applyCurse() {
+      this.holdType = null;
+      this.canHold = true;
+      this.paintHud();
+      if (this.live) syncState(this, true);
+    }
+
     move(dx) {
       if (!this.canPlay()) return;
       if (!this.hits(this.piece.m, this.piece.x + dx, this.piece.y)) {
@@ -582,11 +728,11 @@
     }
 
     lock() {
-      const {m, x, y, color} = this.piece;
+      const {m, x, y, type} = this.piece;
       for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) {
         if (!m[r][c]) continue;
         const gx = x + c, gy = y + r;
-        if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) this.grid[gy][gx] = color;
+        if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) this.grid[gy][gx] = type;
       }
       this.flashUntil = performance.now() + 120;
       this.flashKind = 'lock';
@@ -600,6 +746,7 @@
         if (navigator.vibrate) navigator.vibrate(30);
         const g = GARBAGE[cleared] || 0;
         if (g) sendGarbage(this, g);
+        if (powerUpsEnabled) maybeGrantPowerUp(this, cleared);
         this.flashUntil = performance.now() + 200;
         this.flashKind = 'clear';
         showClearFx(this, cleared);
@@ -628,13 +775,26 @@
       return n;
     }
 
-    addGarbage(n) { this.gQueue += n; }
+    addGarbage(n) {
+      let left = n | 0;
+      if (left <= 0) return;
+      if (this.shieldLeft > 0) {
+        const absorb = Math.min(this.shieldLeft, left);
+        this.shieldLeft -= absorb;
+        left -= absorb;
+        if (absorb) {
+          showBoardToast(this, t('shieldAbsorb'), 'shield');
+          this.paintHud();
+        }
+      }
+      if (left > 0) this.gQueue += left;
+    }
 
     applyGarbage(n) {
       for (let i = 0; i < n; i++) {
         this.grid.shift();
         const gap = (Math.random() * COLS) | 0;
-        const row = Array(COLS).fill(GARBAGE_COLOR);
+        const row = Array(COLS).fill(GARBAGE_TYPE);
         row[gap] = null;
         this.grid.push(row);
       }
@@ -662,8 +822,15 @@
       const changed = level !== this.level;
       this.level = level;
       const baseDropMs = DROP_SPEED[dropSpeed] || DROP_SPEED.normal;
-      this.dropMs = Math.max(MIN_DROP_MS, baseDropMs - (level - 1) * 75);
-      return changed;
+      let dropMs = Math.max(MIN_DROP_MS, baseDropMs - (level - 1) * 75);
+      if (this.torchUntil && performance.now() < this.torchUntil) {
+        dropMs = Math.max(MIN_DROP_MS, dropMs / 2);
+      } else {
+        this.torchUntil = 0;
+      }
+      const speedChanged = dropMs !== this.dropMs;
+      this.dropMs = dropMs;
+      return changed || speedChanged;
     }
 
     ghostY() {
@@ -678,36 +845,86 @@
       if (this.els.lines) this.els.lines.textContent = this.lines;
       drawMini(this.nextCtx, this.next, this.nextSize);
       if (this.holdCtx) drawMini(this.holdCtx, this.holdType, this.nextSize);
+      if (this.els.powerWrap) this.els.powerWrap.hidden = !powerUpsEnabled;
+      if (this.els.powerSlot) {
+        const name = this.powerUp ? relicName(this.powerUp) : t('powerEmpty');
+        this.els.powerSlot.textContent = name;
+        this.els.powerSlot.classList.toggle('has-relic', !!this.powerUp);
+        if (this.shieldLeft > 0) {
+          this.els.powerSlot.title = t('relicShield') + ' ×' + this.shieldLeft;
+        } else {
+          this.els.powerSlot.title = '';
+        }
+      }
+    }
+
+    // Keep canvas bitmaps matched to the current room/viewport (zoom + resize).
+    resyncPixels(block, nextSize) {
+      if (block === this.block && nextSize === this.nextSize) return;
+      this.block = block;
+      this.nextSize = nextSize;
+      const main = this.ctx.canvas;
+      main.width = COLS * block;
+      main.height = ROWS * block;
+      const next = this.nextCtx.canvas;
+      next.width = nextSize;
+      next.height = nextSize;
+      if (this.holdCtx) {
+        const hold = this.holdCtx.canvas;
+        hold.width = nextSize;
+        hold.height = nextSize;
+      }
+      this.draw();
+      this.paintHud();
     }
 
     draw() {
       const ctx = this.ctx, s = this.block;
       const bw = COLS * s, bh = ROWS * s;
       ctx.clearRect(0, 0, bw, bh);
-      ctx.fillStyle = 'rgba(8,6,5,.35)';
+      // Void floor matching the chamber well (not a flat UI screen)
+      const floor = ctx.createLinearGradient(0, 0, 0, bh);
+      floor.addColorStop(0, '#0c0a10');
+      floor.addColorStop(.55, '#08060c');
+      floor.addColorStop(1, '#050408');
+      ctx.fillStyle = floor;
       ctx.fillRect(0, 0, bw, bh);
-      ctx.strokeStyle = 'rgba(180,150,80,.07)';
+      // Soft side wash from room torches (purple left / warm right)
+      const sideWash = ctx.createLinearGradient(0, 0, bw, 0);
+      sideWash.addColorStop(0, 'rgba(90,40,120,.10)');
+      sideWash.addColorStop(.18, 'rgba(0,0,0,0)');
+      sideWash.addColorStop(.82, 'rgba(0,0,0,0)');
+      sideWash.addColorStop(1, 'rgba(160,100,30,.10)');
+      ctx.fillStyle = sideWash;
+      ctx.fillRect(0, 0, bw, bh);
+      ctx.strokeStyle = 'rgba(180,150,70,.18)';
       ctx.lineWidth = 1;
       for (let x = 0; x <= COLS; x++) {
-        ctx.beginPath(); ctx.moveTo(x * s, 0); ctx.lineTo(x * s, bh); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x * s + .5, 0); ctx.lineTo(x * s + .5, bh); ctx.stroke();
       }
       for (let y = 0; y <= ROWS; y++) {
-        ctx.beginPath(); ctx.moveTo(0, y * s); ctx.lineTo(bw, y * s); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, y * s + .5); ctx.lineTo(bw, y * s + .5); ctx.stroke();
       }
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
         if (this.grid[r][c]) drawBlock(ctx, c, r, this.grid[r][c], s);
       }
       if (this.piece && !this.over) {
         const gy = this.ghostY();
-        ctx.globalAlpha = .35;
+        const pType = this.piece.type;
         for (let r = 0; r < this.piece.m.length; r++) for (let c = 0; c < this.piece.m.length; c++) {
-          if (this.piece.m[r][c]) drawBlock(ctx, this.piece.x + c, gy + r, this.piece.color, s, {ghost: true});
+          if (this.piece.m[r][c]) drawBlock(ctx, this.piece.x + c, gy + r, pType, s, {ghost: true});
         }
-        ctx.globalAlpha = 1;
         for (let r = 0; r < this.piece.m.length; r++) for (let c = 0; c < this.piece.m.length; c++) {
-          if (this.piece.m[r][c]) drawBlock(ctx, this.piece.x + c, this.piece.y + r, this.piece.color, s);
+          if (this.piece.m[r][c]) drawBlock(ctx, this.piece.x + c, this.piece.y + r, pType, s);
         }
       }
+      // Deep stone recess — edges fall into the chamber shadow
+      const vg = ctx.createRadialGradient(bw / 2, bh * .42, Math.min(bw, bh) * .18, bw / 2, bh * .5, Math.max(bw, bh) * .78);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(.55, 'rgba(0,0,0,.18)');
+      vg.addColorStop(1, 'rgba(0,0,0,.62)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, bw, bh);
       if (this.flashUntil && performance.now() < this.flashUntil) {
         const fade = (this.flashUntil - performance.now()) / 200;
         const a = Math.max(0, Math.min(.35, fade * .35));
@@ -729,6 +946,9 @@
         piece: this.piece && {m: this.piece.m, x: this.piece.x, y: this.piece.y, color: this.piece.color, type: this.piece.type},
         next: this.next,
         hold: this.holdType,
+        powerUp: this.powerUp,
+        shieldLeft: this.shieldLeft,
+        torchUntil: this.torchUntil,
         score: this.score,
         level: this.level,
         lines: this.lines,
@@ -743,6 +963,9 @@
       this.piece = data.piece;
       this.next = data.next;
       if ('hold' in data) this.holdType = data.hold;
+      if ('powerUp' in data) this.powerUp = data.powerUp;
+      if ('shieldLeft' in data) this.shieldLeft = data.shieldLeft | 0;
+      if ('torchUntil' in data) this.torchUntil = data.torchUntil || 0;
       this.score = data.score;
       this.level = data.level;
       this.lines = data.lines;
@@ -766,111 +989,87 @@
     boardsEl.classList.remove('multi');
   }
 
-  function computePlayfieldSizes(playerCount) {
+  function getPlayViewport() {
     const vv = window.visualViewport;
-    const vh = (vv && vv.height) || window.innerHeight;
     const vw = (vv && vv.width) || window.innerWidth;
-    const desktop = window.matchMedia('(min-width:900px)').matches;
+    const vh = (vv && vv.height) || window.innerHeight;
     const narrow = vw < 700;
-    const padH = desktop ? 48 : (narrow ? 172 : 140);
-    const chromeH = desktop ? 148 : (narrow ? 112 : 132);
-    const availH = Math.max(180, vh - padH - chromeH);
-    const availW = Math.max(280, vw - (narrow ? 12 : 24));
+    // Leave room for fixed title (top) and hint/menu (bottom) so they don't sit on the frame.
+    const chromeTop = 52;
+    const chromeBot = narrow ? 150 : 120;
+    const playH = Math.max(220, vh - chromeTop - chromeBot);
+    return {vw, vh, playW: vw, playH, narrow};
+  }
+
+  function computePlayfieldSizes(playerCount) {
+    const {vw, vh, playW, playH, narrow} = getPlayViewport();
+    const availH = playH;
+    const availW = playW;
     const n = Math.max(1, playerCount | 0);
     const oppCount = Math.max(0, n - 1);
 
-    if (oppCount === 0) {
+    // Local well sized for comfortable play on the full-bleed room.
+    // Intentionally NOT locked to the tiny painted placeholder grid in the art.
+    function sizeLocal() {
       const sideW = narrow ? 58 : 168;
-      const byH = (availH / ROWS) | 0;
-      const byW = ((availW - sideW) / COLS) | 0;
-      const local = Math.max(narrow ? 13 : 18, Math.min(narrow ? 26 : 36, byH, byW));
-      return {local, opp: 10, oppRows: 0, oppCols: 0, availH, availW, vh, vw};
+      const COMFORT = 0.9;
+      const FRAME = 48; // well-frame + name plaque breathing room
+      const byH = (((playH - FRAME) * COMFORT) / ROWS) | 0;
+      const byW = (((playW - sideW - 32) * COMFORT) / COLS) | 0;
+      return {
+        local: Math.max(narrow ? 13 : 18, Math.min(narrow ? 26 : 36, byH, byW)),
+        sideW,
+      };
+    }
+
+    const {local: baseLocal, sideW: youSide} = sizeLocal();
+
+    if (oppCount === 0) {
+      return {local: baseLocal, opp: 10, oppRows: 0, oppCols: 0, availH, availW, vh, vw, youSide};
     }
 
     if (narrow) {
-      // Phones: stack the local board on top and wrap opponents in a row below.
+      // Phones: same local size, then clamp only if opps cannot fit underneath.
       const gap = 10;
-      const youChrome = 42;
-      const oppChrome = 30;
-      const youSide = 52;
-      const oppSide = 40;
-
-      let maxLocal = 26;
-      if (n >= 5) maxLocal = 22;
-      if (n >= 6) maxLocal = 20;
-      if (n >= 8) maxLocal = 18;
-      const minLocal = 12;
-      maxLocal = Math.max(minLocal, Math.min(maxLocal, ((availW - youSide) / COLS) | 0));
-
-      let maxOpp = 11;
-      if (n >= 5) maxOpp = 10;
-      if (n >= 6) maxOpp = 9;
-      if (n >= 8) maxOpp = 8;
-      const minOpp = 7;
-      maxOpp = Math.max(minOpp, Math.min(maxOpp, ((availW - oppSide) / COLS) | 0));
-
-      let best = {local: minLocal, opp: minOpp, oppRows: oppCount, oppCols: 1};
-
-      for (let local = maxLocal; local >= minLocal; local--) {
-        const youH = local * ROWS + youChrome;
-        const remH = availH - youH - gap;
-        if (remH < oppChrome + ROWS * minOpp) continue;
-
-        for (let opp = maxOpp; opp >= minOpp; opp--) {
-          const oppTileW = oppSide + opp * COLS;
-          const oppCols = Math.max(1, Math.min(oppCount, ((availW + gap) / (oppTileW + gap)) | 0));
-          const oppRows = Math.ceil(oppCount / oppCols);
-          const oppTileH = opp * ROWS + oppChrome;
-          const oppsH = oppRows * oppTileH + (oppRows - 1) * gap;
-          if (oppsH > remH) continue;
-          return {local, opp, oppRows, oppCols, availH, availW, vh, vw, youSide, oppSide};
-        }
-      }
-
-      return {local: best.local, opp: best.opp, oppRows: best.oppRows, oppCols: best.oppCols, availH, availW, vh, vw, youSide, oppSide};
-    }
-
-    // Opponents stay in a side column; local board is maximized first.
-    const oppRows = oppCount <= 2 ? 1 : 2;
-    const oppCols = Math.ceil(oppCount / oppRows);
-    const gap = 12;
-    const youChrome = 42;
-    const oppChrome = 34;
-    const youSide = narrow ? 52 : 150;
-    const oppSide = narrow || n >= 4 ? 48 : 100;
-
-    let maxLocal = narrow ? 28 : 38;
-    if (n >= 5) maxLocal = Math.min(maxLocal, narrow ? 24 : 32);
-    if (n >= 6) maxLocal = Math.min(maxLocal, narrow ? 22 : 28);
-    if (n >= 8) maxLocal = Math.min(maxLocal, narrow ? 18 : 24);
-
-    let maxOpp = narrow ? 11 : 13;
-    if (n >= 5) maxOpp = Math.min(maxOpp, 11);
-    if (n >= 6) maxOpp = Math.min(maxOpp, 10);
-    if (n >= 8) maxOpp = Math.min(maxOpp, 9);
-
-    let best = {local: narrow ? 16 : 20, opp: 8};
-    const minLocal = narrow ? 12 : 14;
-
-    for (let local = maxLocal; local >= minLocal; local--) {
+      const youChrome = 56;
+      const oppChrome = 28;
+      const oppSide = 36;
+      let local = baseLocal;
+      const minOppH = oppChrome + ROWS * 7;
       const youH = local * ROWS + youChrome;
-      if (youH > availH) continue;
-      const youW = youSide + local * COLS;
-      const remW = availW - youW - gap;
-      if (remW < 90) continue;
-
-      for (let opp = Math.min(maxOpp, (local * .62) | 0); opp >= 7; opp--) {
-        const oppTileH = opp * ROWS + oppChrome;
-        const oppStackH = oppRows * oppTileH + (oppRows - 1) * gap;
-        if (oppStackH > availH) continue;
-        const oppsW = oppCols * (oppSide + opp * COLS) + (oppCols - 1) * gap;
-        if (oppsW > remW) continue;
-        best = {local, opp};
-        return {local: best.local, opp: best.opp, oppRows, oppCols, availH, availW, vh, vw, youSide, oppSide};
+      if (availH - youH - gap < minOppH) {
+        local = Math.max(13, ((availH - gap - minOppH - youChrome) / ROWS) | 0);
       }
+      const remH = Math.max(60, availH - (local * ROWS + youChrome) - gap);
+      let opp = Math.max(7, Math.min(11, ((remH - oppChrome) / ROWS) | 0));
+      opp = Math.min(opp, Math.max(7, ((availW - oppSide) / COLS) | 0));
+      const oppTileW = oppSide + opp * COLS;
+      const oppCols = Math.max(1, Math.min(oppCount, ((availW + gap) / (oppTileW + gap)) | 0));
+      const oppRows = Math.ceil(oppCount / oppCols);
+      return {local, opp, oppRows, oppCols, availH, availW, vh, vw, youSide, oppSide};
     }
 
-    return {local: best.local, opp: best.opp, oppRows, oppCols, availH, availW, vh, vw, youSide, oppSide};
+    // Desktop multi: local identical to solo; only size opponent tablets.
+    const leftCount = Math.floor(oppCount / 2);
+    const rightCount = oppCount - leftCount;
+    const sideCount = Math.max(1, Math.max(leftCount, rightCount));
+    const oppRows = sideCount <= 2 ? 1 : 2;
+    const oppCols = Math.ceil(sideCount / oppRows);
+    const oppSide = n >= 4 ? 44 : 52;
+    const gap = 10;
+    const local = baseLocal;
+
+    const localW = youSide + local * COLS;
+    const sideBudget = Math.max(72, ((availW - localW) / 2) - 8);
+    let opp = Math.max(7, Math.min(12, ((sideBudget - oppSide) / COLS) | 0));
+    opp = Math.min(opp, Math.max(7, (local * .42) | 0));
+
+    const oppTileH = opp * ROWS + 34;
+    if (oppRows * oppTileH + (oppRows - 1) * gap > availH) {
+      opp = Math.max(7, ((availH / oppRows - 34 - gap) / ROWS) | 0);
+    }
+
+    return {local, opp, oppRows, oppCols, availH, availW, vh, vw, youSide, oppSide};
   }
 
   function computeBlockSize(large, playerCount) {
@@ -882,6 +1081,55 @@
     document.body.classList.toggle('in-game', !!on);
   }
 
+  function sizeGameStage(stage, slot) {
+    // Full-bleed via CSS (100vw/100dvh) so browser zoom/resize cannot leave a postage stamp.
+    slot.style.width = '';
+    slot.style.height = '';
+    stage.style.width = '';
+    stage.style.height = '';
+    stage.style.removeProperty('--stage-scale');
+  }
+
+  function mountOnGameStage(boardHost, block, parentEl) {
+    const slot = document.createElement('div');
+    slot.className = 'game-stage-slot';
+    const stage = document.createElement('div');
+    stage.className = 'game-stage';
+    sizeGameStage(stage, slot);
+    stage.appendChild(boardHost);
+    slot.appendChild(stage);
+    (parentEl || boardsEl).appendChild(slot);
+    return slot;
+  }
+
+  function nextCanvasSize(block, large) {
+    const narrow = getPlayViewport().narrow;
+    if (large) {
+      return Math.max(narrow ? 44 : 64, Math.round(block * (narrow ? 2.2 : 2.8)));
+    }
+    return Math.max(narrow ? 28 : 36, Math.round(block * (narrow ? 2.6 : 3.2)));
+  }
+
+  let playLayoutTimer = 0;
+  function layoutPlayfields() {
+    if (!document.body.classList.contains('in-game') || !boards.length) return;
+    const n = Math.max(1, roster.length || boards.length);
+    for (const b of boards) {
+      const large = !!b.live;
+      const block = computeBlockSize(large, n);
+      b.resyncPixels(block, nextCanvasSize(block, large));
+    }
+  }
+
+  function schedulePlayLayout() {
+    if (playLayoutTimer) clearTimeout(playLayoutTimer);
+    playLayoutTimer = window.setTimeout(() => {
+      playLayoutTimer = 0;
+      layoutPlayfields();
+      resizeFxLayer();
+    }, 80);
+  }
+
   function createBoardSlot(playerId, label, live, large, playerCount, parentEl) {
     const n = Math.max(1, playerCount || roster.length || 1);
     const block = computeBlockSize(!!large, n);
@@ -890,19 +1138,16 @@
     const nw = large
       ? Math.max(narrow ? 44 : 64, Math.round(block * (narrow ? 2.2 : 2.8)))
       : Math.max(narrow ? 28 : 36, Math.round(block * (narrow ? 2.6 : 3.2)));
+    const asTable = !!(live && large);
     const box = document.createElement('div');
-    box.className = 'player ' + (live ? 'you' : 'opp');
+    box.className = 'player ' + (live ? 'you' : 'opp') + (asTable ? ' board-host' : ' tablet');
     box.dataset.id = playerId;
 
     const title = document.createElement('h2');
+    title.className = asTable ? 'name-plaque' : '';
     title.textContent = label;
-    box.appendChild(title);
+    if (!asTable) box.appendChild(title);
 
-    const row = document.createElement('div');
-    row.className = 'row';
-
-    const holdSide = document.createElement('div');
-    holdSide.className = 'side hold-side';
     const holdLabel = document.createElement('div');
     holdLabel.className = 'mini-label';
     holdLabel.textContent = t('hold');
@@ -910,20 +1155,27 @@
     hold.className = 'hold';
     hold.width = nw;
     hold.height = nw;
-    holdSide.append(holdLabel, hold);
+    const powerWrap = document.createElement('div');
+    powerWrap.className = 'power-wrap';
+    powerWrap.hidden = !powerUpsEnabled;
+    const powerLabel = document.createElement('div');
+    powerLabel.className = 'mini-label';
+    powerLabel.textContent = t('relic');
+    const powerSlot = document.createElement('div');
+    powerSlot.className = 'power-slot';
+    powerSlot.textContent = t('powerEmpty');
+    powerWrap.append(powerLabel, powerSlot);
 
     const canvas = document.createElement('canvas');
     canvas.className = 'main';
     canvas.width = cw;
     canvas.height = ch;
-    row.appendChild(canvas);
 
-    const side = document.createElement('div');
-    side.className = 'side';
     const miniLabel = document.createElement('div');
     miniLabel.className = 'mini-label';
     miniLabel.textContent = t('next');
     const next = document.createElement('canvas');
+    next.className = 'next';
     next.width = nw;
     next.height = nw;
     const score = document.createElement('div');
@@ -934,17 +1186,55 @@
     meta.innerHTML = t('meta', {lv: '<span class="lv">1</span>', lines: '<span class="ln">0</span>'});
     const over = document.createElement('div');
     over.className = 'over';
-    side.append(miniLabel, next, score, meta, over);
 
-    // Grouped so Keep + Next can be laid out as a single stacked unit on
-    // narrow screens; `display:contents` keeps them independent flex items
-    // (in original left/right positions) on wider layouts.
-    const hud = document.createElement('div');
-    hud.className = 'hud';
-    hud.append(holdSide, side);
-    row.appendChild(hud);
-    box.appendChild(row);
-    (parentEl || boardsEl).appendChild(box);
+    if (asTable) {
+      const table = document.createElement('div');
+      table.className = 'board-table';
+      table.appendChild(title);
+
+      const shelf = document.createElement('div');
+      shelf.className = 'table-shelf';
+
+      const holdAlcove = document.createElement('div');
+      holdAlcove.className = 'alcove alcove-hold';
+      holdAlcove.append(holdLabel, hold, powerWrap);
+
+      const wellFrame = document.createElement('div');
+      wellFrame.className = 'well-frame';
+      wellFrame.appendChild(canvas);
+
+      const nextAlcove = document.createElement('div');
+      nextAlcove.className = 'alcove alcove-next';
+      const plaque = document.createElement('div');
+      plaque.className = 'stat-plaque';
+      plaque.append(score, meta, over);
+      nextAlcove.append(miniLabel, next, plaque);
+
+      shelf.append(holdAlcove, wellFrame, nextAlcove);
+      table.appendChild(shelf);
+      box.appendChild(table);
+    } else {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const holdSide = document.createElement('div');
+      holdSide.className = 'side hold-side';
+      holdSide.append(holdLabel, hold, powerWrap);
+      row.appendChild(canvas);
+      const side = document.createElement('div');
+      side.className = 'side';
+      side.append(miniLabel, next, score, meta, over);
+      const hud = document.createElement('div');
+      hud.className = 'hud';
+      hud.append(holdSide, side);
+      row.appendChild(hud);
+      box.appendChild(row);
+    }
+
+    if (asTable) {
+      mountOnGameStage(box, block, parentEl || boardsEl);
+    } else {
+      (parentEl || boardsEl).appendChild(box);
+    }
 
     const board = new Board({
       canvas, nextCanvas: next, holdCanvas: hold,
@@ -957,6 +1247,9 @@
         title,
         miniLabel,
         holdLabel,
+        powerLabel,
+        powerSlot,
+        powerWrap,
         meta,
       },
       live, block, playerId, nextSize: nw,
@@ -1008,6 +1301,9 @@
       show(speedRampRow);
       chkSpeedRamp.checked = timeRampEnabled;
       chkSpeedRamp.disabled = false;
+      show(powerUpsRow);
+      chkPowerUps.checked = powerUpsEnabled;
+      chkPowerUps.disabled = false;
       show(dropSpeedRow);
       selDropSpeed.value = DROP_SPEED[dropSpeed] ? dropSpeed : 'normal';
       selDropSpeed.disabled = false;
@@ -1016,9 +1312,11 @@
       selGarbageTarget.disabled = false;
     } else {
       hide(speedRampRow);
+      hide(powerUpsRow);
       hide(dropSpeedRow);
       hide(garbageTargetRow);
       chkSpeedRamp.disabled = true;
+      chkPowerUps.disabled = true;
       selDropSpeed.disabled = true;
       selGarbageTarget.disabled = true;
     }
@@ -1140,6 +1438,81 @@
     netSend({t: 'garbage', n, from: from.playerId});
   }
 
+  function relicName(kind) {
+    if (kind === 'quake') return t('relicQuake');
+    if (kind === 'torch') return t('relicTorch');
+    if (kind === 'shield') return t('relicShield');
+    if (kind === 'curse') return t('relicCurse');
+    return kind || t('powerEmpty');
+  }
+
+  function powerFxText(kind) {
+    if (kind === 'quake') return t('powerQuakeFx');
+    if (kind === 'torch') return t('powerTorchFx');
+    if (kind === 'shield') return t('powerShieldFx');
+    if (kind === 'curse') return t('powerCurseFx');
+    return relicName(kind);
+  }
+
+  function maybeGrantPowerUp(board, cleared) {
+    if (!board || !powerUpsEnabled || board.powerUp) return;
+    if (cleared < 2 || board.elapsed < POWER_GRACE_MS) return;
+    let chance = POWER_CHANCE[cleared] || POWER_CHANCE[4] || 0;
+    if (board.combo >= 3) chance += POWER_COMBO_BONUS;
+    if (Math.random() >= chance) return;
+    const kind = POWER_KINDS[(Math.random() * POWER_KINDS.length) | 0];
+    board.powerUp = kind;
+    showBoardToast(board, t('powerGranted', {name: relicName(kind)}), 'power');
+  }
+
+  function applyPowerToBoard(board, kind) {
+    if (!board || board.over || matchPhase !== 'playing') return;
+    if (kind === 'torch') board.applyTorch();
+    else if (kind === 'curse') board.applyCurse();
+    else if (kind === 'quake') board.applyQuake();
+    else if (kind === 'shield') board.applyShield();
+  }
+
+  function deliverPower(targetId, fromId, kind) {
+    if (targetId === myId) {
+      const local = boardById.get(myId);
+      applyPowerToBoard(local, kind);
+      return;
+    }
+    const c = connections.get(targetId);
+    if (c) sendTo(c, {t: 'powerApply', kind, from: fromId});
+  }
+
+  function showPowerFx(targetId, kind) {
+    const board = boardById.get(targetId);
+    if (!board) return;
+    const root = board.els && board.els.root;
+    if (root) {
+      root.classList.remove('hit-pulse');
+      void root.offsetWidth;
+      root.classList.add('hit-pulse');
+      window.setTimeout(() => root.classList.remove('hit-pulse'), 550);
+    }
+    const toastKind = kind === 'shield' ? 'shield' : 'power';
+    showBoardToast(board, powerFxText(kind), toastKind);
+  }
+
+  function fanoutPower(fromId, kind) {
+    if (!POWER_KIND[kind]) return;
+    if (kind === 'quake' || kind === 'shield') {
+      const fx = {t: 'powerFx', kind, from: fromId, to: fromId};
+      broadcast(fx);
+      showPowerFx(fromId, kind);
+      return;
+    }
+    const targetId = pickGarbageTarget(fromId);
+    if (!targetId) return;
+    deliverPower(targetId, fromId, kind);
+    const fx = {t: 'powerFx', kind, from: fromId, to: targetId};
+    broadcast(fx);
+    showPowerFx(targetId, kind);
+  }
+
   function syncState(board, force) {
     if (!board.live || matchPhase !== 'playing') return;
     if (!force) {
@@ -1183,6 +1556,7 @@
     } else {
       showBanner(t('draw'), 'lose');
       showRematchBtn();
+      startPostHeartbeat();
     }
   }
 
@@ -1212,6 +1586,7 @@
     }
     showRematchBtn();
     updateRematchHint();
+    startPostHeartbeat();
   }
 
   function showRematchBtn() {
@@ -1275,8 +1650,70 @@
     }
   }
 
+  function touchPostSeen(id) {
+    if (matchPhase !== 'post' || !id) return;
+    postLastSeen.set(id, performance.now());
+  }
+
+  function stopPostHeartbeat() {
+    if (postHbTimer) {
+      clearInterval(postHbTimer);
+      postHbTimer = 0;
+    }
+    postLastSeen.clear();
+  }
+
+  function startPostHeartbeat() {
+    stopPostHeartbeat();
+    if (matchPhase !== 'post' || !mode) return;
+    const now = performance.now();
+    roster.forEach(p => postLastSeen.set(p.id, now));
+    if (hostPlayerId) postLastSeen.set(hostPlayerId, now);
+    if (myId) postLastSeen.set(myId, now);
+    postHbTimer = setInterval(tickPostHeartbeat, POST_HB_MS);
+  }
+
+  function removePostPeer(peerId) {
+    if (matchPhase !== 'post' || mode !== 'host' || !peerId || peerId === myId) return false;
+    if (!roster.some(p => p.id === peerId)) return false;
+    connections.delete(peerId);
+    postLastSeen.delete(peerId);
+    roster = roster.filter(p => p.id !== peerId);
+    broadcastRoster();
+    tryHostStart();
+    return true;
+  }
+
+  function tickPostHeartbeat() {
+    if (matchPhase !== 'post') {
+      stopPostHeartbeat();
+      return;
+    }
+    const now = performance.now();
+    if (mode === 'host') {
+      broadcast({t: 'ping'});
+      const stale = [];
+      for (const p of roster) {
+        if (p.id === myId) continue;
+        const seen = postLastSeen.get(p.id);
+        if (seen == null || now - seen > POST_HB_TIMEOUT_MS) stale.push(p.id);
+      }
+      for (const id of stale) {
+        try { connections.get(id)?.close(); } catch (_) {}
+        removePostPeer(id);
+      }
+    } else if (mode === 'guest') {
+      if (guestConn) sendTo(guestConn, {t: 'ping', from: myId});
+      const hostId = hostPlayerId;
+      if (!hostId || migratePhase) return;
+      const seen = postLastSeen.get(hostId);
+      if (seen == null || now - seen > POST_HB_TIMEOUT_MS) handleHostLost();
+    }
+  }
+
   function closeNet() {
     clearMigrateTimer();
+    stopPostHeartbeat();
     suppressNetClose = true;
     connections.forEach(c => { try { c.close(); } catch (_) {} });
     connections.clear();
@@ -1385,6 +1822,7 @@
       renderRoster();
     } else if (matchPhase === 'post') {
       updateRematchHint();
+      startPostHeartbeat();
     }
   }
 
@@ -1440,6 +1878,10 @@
       }
       if (msg.t === 'garbage') {
         fanoutGarbage(msg.from, msg.n);
+        return;
+      }
+      if (msg.t === 'power') {
+        fanoutPower(msg.from, msg.kind);
         return;
       }
       if (msg.t === 'over') {
@@ -1649,7 +2091,7 @@
   }
 
   function burstFirework(x, y) {
-    const hueColors = ['#d4af37', '#f0e0a0', '#e06060', '#5a9e9a', '#c9a227', '#f0c8c8'];
+    const hueColors = ['#d4af37', '#f0e0a0', '#e06060', '#2f98a6', '#c9a227', '#8a42aa', '#6d9d3c'];
     const ring = 36 + ((Math.random() * 18) | 0);
     spawnBurst(x, y, ring, (i) => {
       const ang = (i / ring) * Math.PI * 2 + Math.random() * 0.08;
@@ -1760,7 +2202,13 @@
 
   resizeFxLayer();
   setFxLayerVisible(false);
-  window.addEventListener('resize', resizeFxLayer);
+  window.addEventListener('resize', () => {
+    resizeFxLayer();
+    schedulePlayLayout();
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', schedulePlayLayout);
+  }
 
   function showClearFx(board, cleared) {
     if (!flashyEnabled) return;
@@ -1829,7 +2277,7 @@
     if (roster.length < 1) return;
     if (!roster.every(p => p.ready)) return;
     const ids = roster.map(p => p.id);
-    broadcast({t: 'start', speedRamp: timeRampEnabled, dropSpeed, garbageTarget, players: ids.map(id => {
+    broadcast({t: 'start', speedRamp: timeRampEnabled, dropSpeed, garbageTarget, powerUps: powerUpsEnabled, players: ids.map(id => {
       const p = roster.find(x => x.id === id);
       return {id, name: p.name};
     })});
@@ -1850,16 +2298,30 @@
     const n = players.length;
     const me = players.find(p => p.id === myId);
     const others = players.filter(p => p.id !== myId);
-    if (me) createBoardSlot(me.id, me.name, true, true, n, boardsEl);
+
+    // Local board always sits in the center column; opponents fill side rails
+    // so extra players never shift your well off the room's middle.
     if (others.length) {
       boardsEl.classList.add('multi');
-      const opps = document.createElement('div');
-      opps.className = 'opps';
-      boardsEl.appendChild(opps);
-      others.forEach(p => createBoardSlot(p.id, p.name, false, false, n, opps));
+      const left = document.createElement('div');
+      left.className = 'opps opps-left';
+      const right = document.createElement('div');
+      right.className = 'opps opps-right';
+      const mid = Math.floor(others.length / 2);
+      const leftPlayers = others.slice(0, mid);
+      const rightPlayers = others.slice(mid);
+      boardsEl.appendChild(left);
+      if (me) createBoardSlot(me.id, me.name, true, true, n, boardsEl);
+      boardsEl.appendChild(right);
+      leftPlayers.forEach(p => createBoardSlot(p.id, p.name, false, false, n, left));
+      rightPlayers.forEach(p => createBoardSlot(p.id, p.name, false, false, n, right));
+    } else if (me) {
+      createBoardSlot(me.id, me.name, true, true, n, boardsEl);
     }
+
     roster = players.map(p => ({id: p.id, name: p.name, ready: false, alive: true}));
     matchPhase = 'countdown';
+    stopPostHeartbeat();
     hide(banner);
     hide(btnAgain);
     for (const b of boards) b.draw();
@@ -1872,6 +2334,11 @@
 
   function onHostData(fromId, data) {
     if (!data || typeof data !== 'object') return;
+    if (data.t === 'ping') {
+      touchPostSeen(fromId);
+      return;
+    }
+    if (matchPhase === 'post') touchPostSeen(fromId);
     if (data.t === 'hello') {
       if (matchPhase === 'playing' || (matchPhase !== 'lobby' && matchPhase !== 'post')) {
         sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
@@ -1931,6 +2398,10 @@
       fanoutGarbage(fromId, data.n);
       return;
     }
+    if (data.t === 'power') {
+      fanoutPower(fromId, data.kind);
+      return;
+    }
     if (data.t === 'over') {
       handleOver(fromId);
       return;
@@ -1945,6 +2416,11 @@
 
   function onGuestData(data) {
     if (!data || typeof data !== 'object') return;
+    if (data.t === 'ping') {
+      touchPostSeen(hostPlayerId);
+      return;
+    }
+    if (matchPhase === 'post') touchPostSeen(hostPlayerId);
     if (data.t === 'reject') {
       if (migratePhase === 'reconnecting') {
         scheduleGuestReconnect(migrateAttempt + 1);
@@ -1971,6 +2447,7 @@
         showLobby();
       } else if (matchPhase === 'post') {
         updateRematchHint();
+        startPostHeartbeat();
       }
       return;
     }
@@ -1988,6 +2465,7 @@
       timeRampEnabled = data.speedRamp !== false;
       dropSpeed = DROP_SPEED[data.dropSpeed] ? data.dropSpeed : 'normal';
       garbageTarget = GARBAGE_TARGET[data.garbageTarget] ? data.garbageTarget : 'clockwise';
+      powerUpsEnabled = !!data.powerUps;
       startRemoteMatch(data.players || []);
       return;
     }
@@ -2000,6 +2478,15 @@
     if (data.t === 'garbage') {
       const local = boardById.get(myId);
       if (local && !local.over && data.from !== myId) local.addGarbage(data.n);
+      return;
+    }
+    if (data.t === 'powerApply') {
+      const local = boardById.get(myId);
+      if (local && POWER_KIND[data.kind]) applyPowerToBoard(local, data.kind);
+      return;
+    }
+    if (data.t === 'powerFx') {
+      if (data.to) showPowerFx(data.to, data.kind);
       return;
     }
     if (data.t === 'hit') {
@@ -2031,9 +2518,7 @@
         markDead(peerId);
         checkWinner();
       } else if (matchPhase === 'post') {
-        roster = roster.filter(p => p.id !== peerId);
-        broadcastRoster();
-        tryHostStart();
+        removePostPeer(peerId);
       }
     });
     c.on('error', () => {});
@@ -2271,6 +2756,7 @@
     else if (action === 'soft') b.soft();
     else if (action === 'hard') b.hard();
     else if (action === 'hold') b.hold();
+    else if (action === 'power') b.usePower();
   }
 
   document.addEventListener('keydown', e => {
@@ -2314,6 +2800,12 @@
     if (k === 'c' || k === 'C') {
       if (e.repeat) { e.preventDefault(); return; }
       act('hold');
+      e.preventDefault();
+      return;
+    }
+    if (k === 'v' || k === 'V') {
+      if (e.repeat) { e.preventDefault(); return; }
+      act('power');
       e.preventDefault();
     }
   });
@@ -2365,6 +2857,9 @@
   $('btnReady').onclick = toggleReady;
   chkSpeedRamp.addEventListener('change', () => {
     if (mode === 'host') timeRampEnabled = chkSpeedRamp.checked;
+  });
+  chkPowerUps.addEventListener('change', () => {
+    if (mode === 'host') powerUpsEnabled = chkPowerUps.checked;
   });
   selDropSpeed.addEventListener('change', () => {
     if (mode === 'host' && DROP_SPEED[selDropSpeed.value]) dropSpeed = selDropSpeed.value;

@@ -1,2 +1,3 @@
 /.cursor
 .gitignore
+tools/slice_blocks.py
