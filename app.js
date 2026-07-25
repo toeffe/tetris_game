@@ -1,6 +1,9 @@
 /* VibeTrisimo — host-relay lobby (max 8) */
 (() => {
   const COLS = 10, ROWS = 20;
+  // Hidden sky above the visible well — pieces spawn here so a high stack is
+  // recoverable instead of an instant top-out on the next piece.
+  const BUFFER_ROWS = 3;
   const MAX_PLAYERS = 8;
   const TYPES = ['I','O','T','S','Z','J','L'];
   const GARBAGE_TYPE = 'G';
@@ -50,7 +53,7 @@
   const GARBAGE = {1:0,2:1,3:2,4:4};
   const TIME_LEVEL_MS = 30000; // level up every 30s of play, in addition to line-based leveling
   const MIN_DROP_MS = 40; // fastest possible drop interval (ninja base)
-  const LEVEL_DROP_STEP_MS = 25; // how much each level shortens the drop interval
+  const LEVEL_DROP_STEP_MS = 15; // how much each level shortens the drop interval
   const DROP_SPEED = { slow: 1400, normal: 1000, fast: 400, turbo: 160, insane: 80, ninja: 40 };
   // Lock slide scales with gravity: ~50% of current dropMs, with a floor so
   // fast/turbo/insane/ninja still allow a readable slide before lock.
@@ -621,7 +624,7 @@
       this.next = bagPiece(this.bag);
       const shape = SHAPES[type];
       const m = shape.m.map(r => r.slice());
-      this.piece = {type, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: 0};
+      this.piece = {type, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: -BUFFER_ROWS};
       this.canHold = true;
       this.acc = 0;
       this.lockAcc = 0;
@@ -665,7 +668,7 @@
         this.holdType = curType;
         const shape = SHAPES[swap];
         const m = shape.m.map(r => r.slice());
-        this.piece = {type: swap, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: 0};
+        this.piece = {type: swap, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: -BUFFER_ROWS};
         this.acc = 0;
         this.lockAcc = 0;
         if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
@@ -772,10 +775,23 @@
 
     lock() {
       const {m, x, y, type} = this.piece;
+      let placed = 0;
       for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) {
         if (!m[r][c]) continue;
         const gx = x + c, gy = y + r;
-        if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) this.grid[gy][gx] = type;
+        if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) {
+          this.grid[gy][gx] = type;
+          placed++;
+        }
+      }
+      // Lock-out: piece settled entirely in the sky buffer — no recovery.
+      if (!placed) {
+        this.over = true;
+        if (this.els.over) this.els.over.textContent = t('topOut');
+        this.paintHud();
+        syncState(this, true);
+        onTopOut(this);
+        return;
       }
       this.flashUntil = performance.now() + 120;
       this.flashKind = 'lock';
@@ -963,10 +979,14 @@
         const gy = this.ghostY();
         const pType = this.piece.type;
         for (let r = 0; r < this.piece.m.length; r++) for (let c = 0; c < this.piece.m.length; c++) {
-          if (this.piece.m[r][c]) drawBlock(ctx, this.piece.x + c, gy + r, pType, s, {ghost: true});
+          if (!this.piece.m[r][c]) continue;
+          const gRow = gy + r;
+          if (gRow >= 0) drawBlock(ctx, this.piece.x + c, gRow, pType, s, {ghost: true});
         }
         for (let r = 0; r < this.piece.m.length; r++) for (let c = 0; c < this.piece.m.length; c++) {
-          if (this.piece.m[r][c]) drawBlock(ctx, this.piece.x + c, this.piece.y + r, pType, s);
+          if (!this.piece.m[r][c]) continue;
+          const row = this.piece.y + r;
+          if (row >= 0) drawBlock(ctx, this.piece.x + c, row, pType, s);
         }
       }
       // Deep stone recess — edges fall into the chamber shadow

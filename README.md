@@ -10,9 +10,10 @@ A browser-based multiplayer Tetris battle with a dark fantasy dungeon look. Host
 
 - **Peer-to-peer multiplayer** — host-relay lobby for up to **8** players (PeerJS / WebRTC)
 - **Last survivor wins** — clear lines to send garbage; top out and you’re eliminated
+- **Sky buffer** — pieces spawn 3 rows above the visible well so a high stack is still recoverable; locking entirely in the sky still tops you out
 - **Hold / next / ghost** — keep a piece (`C`), preview the next one, and see the drop ghost
 - **7-bag randomizer** — fair piece distribution
-- **Drop speed** — host picks Slow / Normal / Fast / Turbo before the match
+- **Drop speed** — host picks Slow / Normal / Fast / Turbo / Insane / Ninja before the match
 - **Garbage targeting** — host picks who receives attacks (next in line, anyone, or left/right only)
 - **Speed ramp** — optional host setting that levels up over time as well as by lines cleared
 - **Relics (power-ups)** — optional host setting; clear Doubles+ for a chance at Quake, Torch, Shield, or Curse (`V` / Use)
@@ -88,7 +89,7 @@ The host sets **Drop speed** for base gravity:
 | Insane | 80 ms              |
 | Ninja  | 40 ms              |
 
-Level then rises from lines cleared (every 10 lines) and, if **Speed increases over time** is on, also every 30 seconds of play. Each level shortens the drop interval by 25 ms from that base, floored at 40 ms so the game stays playable at high levels.
+Level then rises from lines cleared (every 10 lines) and, if **Speed increases over time** is on, also every 30 seconds of play. Each level shortens the drop interval by 15 ms from that base, floored at 40 ms so the game stays playable at high levels.
 
 ## Tech stack
 
