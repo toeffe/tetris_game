@@ -229,6 +229,45 @@ body.in-game #atmosphere .vignette{
   accent-color:var(--gold);
   cursor:pointer;
 }
+.mute-btn{
+  width:auto;
+  min-width:36px;
+  margin:0 0 0 2px;
+  padding:4px 8px;
+  font-size:.85rem;
+  letter-spacing:0;
+  opacity:.75;
+  box-shadow:none;
+  border:2px solid transparent;
+  background:transparent;
+  color:var(--parchment);
+  line-height:1;
+}
+.mute-btn:hover{
+  filter:none;
+  opacity:1;
+  background:rgba(212,175,55,.15);
+  border-color:transparent;
+  color:var(--parchment);
+}
+.mute-btn:active{transform:none;}
+.mute-btn[aria-pressed="true"]{
+  opacity:1;
+  color:#e08080;
+  background:rgba(120,40,30,.35);
+}
+.mute-btn .mute-label{
+  font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.settings-sub{
+  margin-top:18px;
+  font-size:.95rem;
+  opacity:.92;
+}
 
 .title{
   font-family:var(--font-display);

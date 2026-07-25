@@ -23,6 +23,9 @@
       <input id="chkFlashy" type="checkbox" checked>
       <span data-i18n="flashyFx">FX</span>
     </label>
+    <button type="button" id="btnMute" class="mute-btn" aria-pressed="false" data-i18n-aria="muteToggle" aria-label="Mute audio" title="Mute">
+      <span class="mute-label" data-i18n="mute">Mute</span>
+    </button>
   </div>
 
   <canvas id="fxLayer" aria-hidden="true"></canvas>
@@ -61,7 +64,24 @@
       <input id="chkShake" type="checkbox" checked>
       <span data-i18n="shakeLabel">Screen shake</span>
     </label>
+    <h2 class="settings-title settings-sub" data-i18n="audioTitle">Audio</h2>
+    <label class="setting-slider">
+      <span data-i18n="volMaster">Master</span>
+      <input id="rngMaster" type="range" min="0" max="100" step="1" value="72">
+      <output id="outMaster" for="rngMaster">72</output>
+    </label>
+    <label class="setting-slider">
+      <span data-i18n="volMusic">Music</span>
+      <input id="rngMusic" type="range" min="0" max="100" step="1" value="42">
+      <output id="outMusic" for="rngMusic">42</output>
+    </label>
+    <label class="setting-slider">
+      <span data-i18n="volSfx">SFX</span>
+      <input id="rngSfx" type="range" min="0" max="100" step="1" value="78">
+      <output id="outSfx" for="rngSfx">78</output>
+    </label>
     <p class="hint" data-i18n="settingsHint">Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.</p>
+    <p class="hint" data-i18n="audioHint">Music and SFX are synthesized in-browser (no downloads).</p>
     <button id="btnSettingsBack" class="secondary" type="button" data-i18n="back">Back</button>
   </div>
 
@@ -146,6 +166,7 @@
   <div id="banner" hidden></div>
   <div id="countdown" hidden aria-live="assertive"></div>
   <script src="./peerjs.min.js"></script>
+  <script src="./audio.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

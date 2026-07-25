@@ -101,6 +101,44 @@
   function storageSet(key, value) {
     try { localStorage.setItem(key, value); } catch (_) {}
   }
+
+  function audio() {
+    return window.VibeAudio || null;
+  }
+
+  function sfx(name, arg) {
+    const a = audio();
+    if (a) a.sfx(name, arg);
+  }
+
+  function syncMuteBtn() {
+    const btn = document.getElementById('btnMute');
+    const a = audio();
+    if (!btn || !a) return;
+    const muted = a.isMuted();
+    btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    const label = btn.querySelector('.mute-label');
+    if (label) label.textContent = muted ? t('unmute') : t('mute');
+    btn.title = muted ? t('unmute') : t('mute');
+    btn.setAttribute('aria-label', t('muteToggle'));
+  }
+
+  function updateMusicIntensity(board) {
+    const a = audio();
+    if (!a || !board) return;
+    let top = ROWS;
+    for (let r = 0; r < ROWS; r++) {
+      if (board.grid[r].some(Boolean)) { top = r; break; }
+    }
+    const height = (ROWS - top) / ROWS;
+    const levelPart = Math.min(1, Math.max(0, (board.level - 1) / 14));
+    a.setIntensity(clamp01(levelPart * 0.55 + height * 0.55));
+  }
+
+  function clamp01(n) {
+    return Math.max(0, Math.min(1, n));
+  }
+
   const FX_COLORS = ['#d4af37', '#c9a227', '#e8d9b5', '#8b1a1a', '#a84848', '#2f98a6', '#6d9d3c', '#8a42aa', '#c87a2a', '#f0e0a0', '#3a6cb0', '#c23a42'];
 
   const STR = {
@@ -189,6 +227,14 @@
       settingsHint: 'Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.',
       settingsSaved: 'Saved',
       shakeLabel: 'Screen shake',
+      audioTitle: 'Audio',
+      volMaster: 'Master',
+      volMusic: 'Music',
+      volSfx: 'SFX',
+      audioHint: 'Music and SFX are synthesized in-browser (no downloads).',
+      mute: 'Mute',
+      unmute: 'Sound',
+      muteToggle: 'Mute audio',
       rotCcw: '↺',
       rotCw: '↻',
       rematchStart: 'Starting…',
@@ -298,6 +344,14 @@
       settingsHint: 'Lavere DAS/ARR = hurtigere bevægelse. Blødt fald gentages mens tasten holdes.',
       settingsSaved: 'Gemt',
       shakeLabel: 'Skærmryst',
+      audioTitle: 'Lyd',
+      volMaster: 'Master',
+      volMusic: 'Musik',
+      volSfx: 'Effekter',
+      audioHint: 'Musik og lydeffekter genereres i browseren (ingen downloads).',
+      mute: 'Lyd fra',
+      unmute: 'Lyd',
+      muteToggle: 'Slå lyd fra',
       rotCcw: '↺',
       rotCw: '↻',
       rematchStart: 'Starter…',
@@ -483,6 +537,7 @@
     const da = $('btnLangDa'), en = $('btnLangEn');
     if (da) da.classList.toggle('active', lang === 'da');
     if (en) en.classList.toggle('active', lang === 'en');
+    syncMuteBtn();
     // Refresh dynamic UI if present
     if (typeof renderRoster === 'function' && matchPhase === 'lobby') renderRoster();
     if (typeof updateRematchHint === 'function' && matchPhase === 'post') updateRematchHint();
@@ -1036,6 +1091,7 @@
         }
       }
       this.canHold = false;
+      sfx('hold');
       this.paintHud();
       syncState(this, true);
     }
@@ -1091,6 +1147,7 @@
         this.piece.x += dx;
         this.lastAction = 'move';
         this.tryLockReset();
+        sfx('move');
         syncState(this);
       }
     }
@@ -1114,6 +1171,7 @@
           this.lastAction = 'rotate';
           this.lastKick = i;
           this.tryLockReset();
+          sfx('rotate');
           syncState(this);
           return;
         }
@@ -1128,6 +1186,7 @@
         this.acc = 0;
         this.lockAcc = 0;
         this.lastAction = 'drop';
+        sfx('soft');
         this.paintHud();
         syncState(this);
       }
@@ -1147,7 +1206,8 @@
       this.visSnap = true;
       this.syncVis(true);
       if (d > 0) fxForHardDrop(this, d);
-      this.lock();
+      sfx('hard');
+      this.lock(true);
     }
 
     findFullRows() {
@@ -1230,7 +1290,7 @@
       }
     }
 
-    lock() {
+    lock(fromHard) {
       const {m, x, y, type} = this.piece;
       const tSpin = this.detectTSpin();
       let placed = 0;
@@ -1253,6 +1313,7 @@
         onTopOut(this);
         return;
       }
+      if (!fromHard) sfx('lock');
       this.lockPulse = 1;
       this.settleCells = placedCells;
       this.flashUntil = performance.now() + 120;
@@ -1261,6 +1322,7 @@
       const fullRows = this.findFullRows();
       const cleared = fullRows.length;
       let pendingGarbage = 0;
+      const prevLevel = this.level;
       if (cleared > 0) {
         let base = clearScore(cleared, tSpin);
         const difficult = cleared === 4 || tSpin > 0;
@@ -1272,6 +1334,10 @@
         this.lines += cleared;
         this.b2b = difficult;
         this.updateSpeed();
+        if (this.level > prevLevel) sfx('levelup');
+        if (tSpin) sfx('tspin', tSpin >= 2);
+        else sfx('clear', cleared);
+        if (this.combo >= 2) sfx('combo', this.combo);
         if (navigator.vibrate) navigator.vibrate(cleared >= 4 || tSpin ? 45 : 30);
         const g = GARBAGE[cleared] || 0;
         if (g) sendGarbage(this, g);
@@ -1293,6 +1359,7 @@
           this.score += clearScore(0, tSpin) * this.level;
           showClearFx(this, 0, tSpin, false);
           triggerShake(2.5);
+          sfx('tspin', tSpin >= 2);
         }
         this.combo = 0;
         if (this.gQueue) {
@@ -1301,6 +1368,7 @@
         }
         if (!this.over) this.spawn();
       }
+      updateMusicIntensity(this);
       this.paintHud();
       syncState(this, true);
     }
@@ -1943,6 +2011,8 @@
     btnAgain.disabled = false;
     btnAgain.textContent = t('playAgain');
     show(menu);
+    const a = audio();
+    if (a) a.stopMusic(350);
   }
 
   function syncSettingsUI() {
@@ -1953,6 +2023,15 @@
     if (rngSoft) { rngSoft.value = String(SOFT_MS); if (outSoft) outSoft.textContent = String(SOFT_MS); }
     const chkShake = $('chkShake');
     if (chkShake) chkShake.checked = shakeEnabled;
+    const a = audio();
+    if (a) {
+      const st = a.getState();
+      const pct = (v) => String(Math.round(v * 100));
+      if ($('rngMaster')) { $('rngMaster').value = pct(st.master); if ($('outMaster')) $('outMaster').textContent = pct(st.master); }
+      if ($('rngMusic')) { $('rngMusic').value = pct(st.music); if ($('outMusic')) $('outMusic').textContent = pct(st.music); }
+      if ($('rngSfx')) { $('rngSfx').value = pct(st.sfx); if ($('outSfx')) $('outSfx').textContent = pct(st.sfx); }
+    }
+    syncMuteBtn();
   }
 
   function showSettings() {
@@ -2003,8 +2082,13 @@
   }
 
   function applyCountdownBeat(v) {
-    if (v === 'go') showCountdownBeat(t('go'), true);
-    else showCountdownBeat(String(v), false);
+    if (v === 'go') {
+      showCountdownBeat(t('go'), true);
+      sfx('countdown', 'go');
+    } else {
+      showCountdownBeat(String(v), false);
+      sfx('countdown', v);
+    }
   }
 
   function finishCountdownToPlay() {
@@ -2129,6 +2213,14 @@
     last = performance.now();
     stopLoop();
     startLoop();
+    const a = audio();
+    if (a) {
+      a.resume().then(() => {
+        if (!a.isMuted()) a.startMusic();
+        const mine = boardById.get(myId);
+        if (mine) updateMusicIntensity(mine);
+      });
+    }
   }
 
   function stopLoop() {
@@ -2161,6 +2253,8 @@
     }
     if (!document.hidden) tickHeldKeys(dt);
     for (const b of boards) if (b.live) b.tick(dt);
+    const mine = boards.find(b => b.live);
+    if (mine) updateMusicIntensity(mine);
   }
 
   function drawLoop() {
@@ -2266,6 +2360,9 @@
     markDead(board.playerId);
     netSend({t: 'over', from: board.playerId});
     showBanner(t('eliminated'), 'lose');
+    sfx('gameover');
+    const a = audio();
+    if (a) a.stopMusic(600);
   }
 
   function markDead(id) {
@@ -2316,10 +2413,14 @@
     if (winnerId === myId) {
       showBanner(t('victory'), 'win');
       burstFireworks();
+      sfx('win');
     } else {
       const w = roster.find(p => p.id === winnerId);
       showBanner(t('wins', {name: w?.name || t('defaultName')}), 'lose');
+      sfx('gameover');
     }
+    const a = audio();
+    if (a) a.stopMusic(700);
     showRematchBtn();
     updateRematchHint();
     startPostHeartbeat();
@@ -3817,10 +3918,19 @@
   });
 
   /* ---------- wiring ---------- */
-  $('btnHost').onclick = () => openNetUI('host');
-  $('btnJoin').onclick = () => openNetUI('guest');
-  if ($('btnSettings')) $('btnSettings').onclick = showSettings;
-  if ($('btnSettingsBack')) $('btnSettingsBack').onclick = showMenu;
+  function menuClick(fn) {
+    return (ev) => {
+      sfx('menu');
+      const a = audio();
+      if (a) a.resume();
+      return fn(ev);
+    };
+  }
+
+  $('btnHost').onclick = menuClick(() => openNetUI('host'));
+  $('btnJoin').onclick = menuClick(() => openNetUI('guest'));
+  if ($('btnSettings')) $('btnSettings').onclick = menuClick(showSettings);
+  if ($('btnSettingsBack')) $('btnSettingsBack').onclick = menuClick(showMenu);
   [['rngDas', 'outDas'], ['rngArr', 'outArr'], ['rngSoft', 'outSoft']].forEach(([rngId, outId]) => {
     const rng = $(rngId), out = $(outId);
     if (!rng) return;
@@ -3837,11 +3947,44 @@
     });
     rng.addEventListener('change', commit);
   });
+  function bindVolSlider(rngId, outId, setter) {
+    const rng = $(rngId), out = $(outId);
+    if (!rng) return;
+    const apply = () => {
+      const a = audio();
+      const v = clamp01((parseInt(rng.value, 10) || 0) / 100);
+      if (a) setter(a, v);
+      if (out) out.textContent = String(Math.round(v * 100));
+      sfx('menu');
+    };
+    rng.addEventListener('input', () => {
+      const a = audio();
+      const v = clamp01((parseInt(rng.value, 10) || 0) / 100);
+      if (a) setter(a, v);
+      if (out) out.textContent = String(Math.round(v * 100));
+    });
+    rng.addEventListener('change', apply);
+  }
+  bindVolSlider('rngMaster', 'outMaster', (a, v) => a.setMaster(v));
+  bindVolSlider('rngMusic', 'outMusic', (a, v) => a.setMusic(v));
+  bindVolSlider('rngSfx', 'outSfx', (a, v) => a.setSfx(v));
+  if ($('btnMute')) {
+    $('btnMute').onclick = () => {
+      const a = audio();
+      if (!a) return;
+      a.resume().then(() => {
+        a.toggleMute();
+        syncMuteBtn();
+        if (!a.isMuted()) sfx('menu');
+      });
+    };
+  }
   syncSettingsUI();
-  $('btnNetBack').onclick = showMenu;
-  $('btnLobbyLeave').onclick = showMenu;
-  $('btnNetGo').onclick = joinRoom;
-  $('btnReady').onclick = toggleReady;
+  syncMuteBtn();
+  $('btnNetBack').onclick = menuClick(showMenu);
+  $('btnLobbyLeave').onclick = menuClick(showMenu);
+  $('btnNetGo').onclick = menuClick(joinRoom);
+  $('btnReady').onclick = menuClick(toggleReady);
   selSpeedRamp.addEventListener('change', () => {
     if (mode === 'host') timeRampEnabled = selSpeedRamp.value === 'on';
   });
@@ -3883,8 +4026,8 @@
   }
   $('btnCopy').onclick = copyCode;
   $('btnCopyLobby').onclick = copyCode;
-  $('btnMenu').onclick = showMenu;
-  $('btnAgain').onclick = rematch;
+  $('btnMenu').onclick = menuClick(showMenu);
+  $('btnAgain').onclick = menuClick(rematch);
   $('btnLangDa').onclick = () => setLang('da');
   $('btnLangEn').onclick = () => setLang('en');
   const chkFlashy = $('chkFlashy');
