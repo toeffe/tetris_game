@@ -85,8 +85,9 @@ The host sets **Drop speed** for base gravity:
 | Normal | 1000 ms            |
 | Fast   | 400 ms             |
 | Turbo  | 160 ms             |
+| Insane | 80 ms              |
 
-Level then rises from lines cleared (every 10 lines) and, if **Speed increases over time** is on, also every 30 seconds of play. Each level shortens the drop interval by 75 ms from that base, floored at 120 ms so the game stays playable at high levels.
+Level then rises from lines cleared (every 10 lines) and, if **Speed increases over time** is on, also every 30 seconds of play. Each level shortens the drop interval by 75 ms from that base, floored at 80 ms so the game stays playable at high levels.
 
 ## Tech stack
 

@@ -49,10 +49,10 @@
   }
   const GARBAGE = {1:0,2:1,3:2,4:4};
   const TIME_LEVEL_MS = 30000; // level up every 30s of play, in addition to line-based leveling
-  const MIN_DROP_MS = 120; // fastest possible drop interval, so it never becomes unplayable
-  const DROP_SPEED = { slow: 1400, normal: 1000, fast: 400, turbo: 160 };
+  const MIN_DROP_MS = 80; // fastest possible drop interval (insane base)
+  const DROP_SPEED = { slow: 1400, normal: 1000, fast: 400, turbo: 160, insane: 80 };
   // Lock slide scales with gravity: ~50% of current dropMs, with a floor so
-  // fast/turbo still allow a readable slide before lock.
+  // fast/turbo/insane still allow a readable slide before lock.
   const LOCK_DELAY_RATIO = 0.5;
   const MIN_LOCK_MS = 200;
   const MAX_LOCK_MS = 450;
@@ -104,6 +104,7 @@
       dropNormal: 'Normal',
       dropFast: 'Fast',
       dropTurbo: 'Turbo',
+      dropInsane: 'Insane',
       garbageTarget: 'Who gets garbage',
       targetClockwise: 'Always the next player',
       targetRandom: 'Anyone still alive',
@@ -194,6 +195,7 @@
       dropNormal: 'Normal',
       dropFast: 'Hurtig',
       dropTurbo: 'Turbo',
+      dropInsane: 'Vanvittig',
       garbageTarget: 'Hvem får skrald',
       targetClockwise: 'Altid næste spiller',
       targetRandom: 'Enhver der er i live',
