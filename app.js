@@ -385,7 +385,7 @@
 
   /* ---------- stage FX: shake / hit-stop / level theme ---------- */
   let hitStopLeft = 0;
-  let shakeState = { mag: 0, until: 0, dur: 280 };
+  let shakeState = { mag: 0, until: 0, dur: 160, phase: 0 };
   let stageParallax = { x: 0, y: 0 };
 
   function triggerHitStop(ms) {
@@ -395,12 +395,14 @@
 
   function triggerShake(intensity) {
     if (!shakeEnabled || !fxMotionOk()) return;
-    // Scale up so clears/drops read on a large desktop canvas
-    const mag = Math.max(0, intensity) * 1.8;
-    if (mag >= shakeState.mag * 0.6 || performance.now() > shakeState.until) {
-      shakeState.mag = Math.max(shakeState.mag * 0.35, mag);
-      shakeState.dur = 220 + mag * 18;
+    // Keep kicks small — random high-mag shake reads as lag
+    const mag = Math.min(7, Math.max(0, intensity) * 0.55);
+    if (mag < 0.8) return;
+    if (mag >= shakeState.mag * 0.75 || performance.now() > shakeState.until) {
+      shakeState.mag = mag;
+      shakeState.dur = 120 + mag * 14;
       shakeState.until = performance.now() + shakeState.dur;
+      shakeState.phase = Math.random() * Math.PI * 2;
     }
   }
 
@@ -433,17 +435,17 @@
     let tx = 0, ty = 0;
     if (shakeEnabled && shakeState.until > now) {
       const p = Math.max(0, (shakeState.until - now) / shakeState.dur);
-      // Linear-ish decay (was p² — died too fast to notice)
-      const m = shakeState.mag * (0.35 + 0.65 * p);
-      tx = (Math.random() - 0.5) * 2 * m;
-      ty = (Math.random() - 0.5) * 2 * m;
+      // Smooth damped sine — not per-frame random jitter
+      const m = shakeState.mag * p * p;
+      const t = (1 - p) * 18 + shakeState.phase;
+      tx = Math.sin(t * 1.7) * m;
+      ty = Math.cos(t * 2.3) * m * 0.55;
     }
     stage.style.backgroundPosition =
       'center, center, calc(50% + ' + stageParallax.x.toFixed(2) + 'px) calc(48% + ' + stageParallax.y.toFixed(2) + 'px)';
     stage.style.transform = 'translate3d(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px,0)';
-    // Also nudge the local board so shake reads even if stage art dominates
     const host = stage.querySelector('.player.board-host');
-    if (host) host.style.transform = (tx || ty) ? 'translate3d(' + (tx * 0.6).toFixed(2) + 'px,' + (ty * 0.6).toFixed(2) + 'px,0)' : '';
+    if (host) host.style.transform = '';
   }
 
   function t(key, vars) {
@@ -1281,12 +1283,11 @@
         this.flashUntil = performance.now() + 200;
         this.flashKind = 'clear';
         showClearFx(this, cleared, tSpin, b2bAwarded);
-        // Impact scaling: singles soft, Tetris / T-spin heavy
-        const impact = tSpin ? 10 + cleared * 2 : (cleared >= 4 ? 14 : cleared >= 3 ? 9 : cleared >= 2 ? 6 : 3.5);
-        triggerShake(impact);
-        if (cleared >= 4 || tSpin >= 2) triggerHitStop(90);
-        else if (cleared >= 3 || tSpin === 1) triggerHitStop(55);
-        else if (cleared >= 2) triggerHitStop(30);
+        // Light camera kick — reserve weight for Tetris / T-spins
+        const impact = tSpin >= 2 ? 6 + cleared : (cleared >= 4 ? 7 : cleared >= 3 ? 4 : cleared >= 2 ? 2.5 : 0);
+        if (impact) triggerShake(impact);
+        if (cleared >= 4 || tSpin >= 2) triggerHitStop(45);
+        else if (cleared >= 3) triggerHitStop(28);
         pendingGarbage = this.gQueue;
         this.gQueue = 0;
         this.beginClearAnim(fullRows, pendingGarbage);
@@ -1294,7 +1295,7 @@
         if (tSpin) {
           this.score += clearScore(0, tSpin) * this.level;
           showClearFx(this, 0, tSpin, false);
-          triggerShake(3);
+          triggerShake(2.5);
         }
         this.combo = 0;
         if (this.gQueue) {
@@ -2767,19 +2768,19 @@
 
   function burstDust(x, y, count, color) {
     spawnBurst(x, y, count, () => {
-      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.6;
-      const spd = 1.2 + Math.random() * 4.5;
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+      const spd = 0.7 + Math.random() * 2.8;
       return {
         kind: 'dust',
-        x: x + (Math.random() - 0.5) * 14,
-        y: y + (Math.random() - 0.5) * 8,
+        x: x + (Math.random() - 0.5) * 10,
+        y: y + (Math.random() - 0.5) * 6,
         vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd * 0.55 - Math.random() * 1.5,
-        g: 0.14,
-        life: 0.45 + Math.random() * 0.55,
+        vy: Math.sin(ang) * spd * 0.45 - Math.random(),
+        g: 0.1,
+        life: 0.3 + Math.random() * 0.35,
         max: 0,
-        size: 2.2 + Math.random() * 3.8,
-        color: color || '#d4c4a0',
+        size: 1.4 + Math.random() * 2.2,
+        color: color || '#c8b890',
       };
     });
   }
@@ -2794,25 +2795,21 @@
       if (gy >= 0) cells.push({x: x + c, y: gy});
     }
     const color = (SHAPES[type] && SHAPES[type].color) || '#c9a227';
+    // Light ash puff only — no shake/embers on every drop (that felt laggy)
     cells.forEach(cell => {
       const p = boardCellScreen(board, cell.x, cell.y);
-      burstDust(p.x, p.y, Math.min(14, 6 + (dist / 3) | 0), color);
+      burstDust(p.x, p.y, Math.min(5, 2 + (dist / 6) | 0), color);
     });
-    // Impact thud — always, stronger for long drops
-    triggerShake(dist >= 12 ? 5 : dist >= 6 ? 3.5 : 2.2);
-    burstEmbers(
-      cells.length ? boardCellScreen(board, cells[0].x, cells[0].y).x : boardOrigin(board).x,
-      cells.length ? boardCellScreen(board, cells[0].x, cells[0].y).y : boardOrigin(board).y,
-      Math.min(16, 4 + (dist / 2) | 0)
-    );
+    if (dist >= 14) triggerShake(2);
   }
 
   function fxForLock(board, cells) {
     if (!fxMotionOk() || !fxCtx || !cells || !cells.length) return;
-    cells.forEach(cell => {
-      const p = boardCellScreen(board, cell.x, cell.y);
-      burstDust(p.x, p.y, 4, '#e8d9b5');
-    });
+    // One soft puff at the piece centroid
+    let sx = 0, sy = 0;
+    cells.forEach(c => { sx += c.x; sy += c.y; });
+    const p = boardCellScreen(board, sx / cells.length, sy / cells.length);
+    burstDust(p.x, p.y, 3, '#d8c8a0');
   }
 
   function pushParticle(p) {
@@ -2828,25 +2825,35 @@
     for (let i = 0; i < count; i++) pushParticle(make(i));
   }
 
-  function burstConfetti(x, y, count) {
+  // Brass / ember shard burst — replaces cheap multicolor confetti
+  const SHARD_COLORS = ['#f0e0a0', '#d4af37', '#c9a227', '#e8c76a', '#a8841a', '#e8a060', '#f5d080'];
+  function burstShards(x, y, count) {
     spawnBurst(x, y, count, () => {
-      const ang = Math.random() * Math.PI * 2;
-      const spd = 2.2 + Math.random() * 7.5;
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.35;
+      const spd = 2.4 + Math.random() * 5.5;
+      const len = 5 + Math.random() * 9;
       return {
-        kind: 'rect',
-        x, y,
+        kind: 'shard',
+        x: x + (Math.random() - 0.5) * 16,
+        y: y + (Math.random() - 0.5) * 10,
         vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd - (2 + Math.random() * 4),
-        g: 0.18 + Math.random() * 0.12,
-        life: 0.7 + Math.random() * 0.9,
+        vy: Math.sin(ang) * spd - (1.5 + Math.random() * 2.5),
+        g: 0.14 + Math.random() * 0.08,
+        life: 0.55 + Math.random() * 0.55,
         max: 0,
-        rot: Math.random() * Math.PI,
-        spin: (Math.random() - 0.5) * 0.35,
-        w: 3 + Math.random() * 5,
-        h: 2 + Math.random() * 3,
-        color: FX_COLORS[(Math.random() * FX_COLORS.length) | 0],
+        rot: ang + Math.PI / 2,
+        spin: (Math.random() - 0.5) * 0.22,
+        w: len,
+        h: 1.1 + Math.random() * 1.6,
+        color: SHARD_COLORS[(Math.random() * SHARD_COLORS.length) | 0],
+        glow: true,
       };
     });
+  }
+
+  // Legacy name kept for fireworks call sites
+  function burstConfetti(x, y, count) {
+    burstShards(x, y, count);
   }
 
   function burstGlitter(x, y, count) {
@@ -2887,25 +2894,25 @@
   }
 
   function burstFirework(x, y) {
-    const hueColors = ['#d4af37', '#f0e0a0', '#e06060', '#2f98a6', '#c9a227', '#8a42aa', '#6d9d3c'];
-    const ring = 36 + ((Math.random() * 18) | 0);
+    const ring = 28 + ((Math.random() * 12) | 0);
     spawnBurst(x, y, ring, (i) => {
-      const ang = (i / ring) * Math.PI * 2 + Math.random() * 0.08;
-      const spd = 3.2 + Math.random() * 4.8;
+      const ang = (i / ring) * Math.PI * 2 + Math.random() * 0.06;
+      const spd = 2.8 + Math.random() * 3.8;
       return {
         kind: 'ember',
         x, y,
         vx: Math.cos(ang) * spd,
         vy: Math.sin(ang) * spd,
-        g: 0.06,
-        life: 0.7 + Math.random() * 0.6,
+        g: 0.05,
+        life: 0.55 + Math.random() * 0.45,
         max: 0,
-        size: 1.8 + Math.random() * 2.2,
-        color: hueColors[(Math.random() * hueColors.length) | 0],
+        size: 1.4 + Math.random() * 1.8,
+        color: SHARD_COLORS[(Math.random() * SHARD_COLORS.length) | 0],
         trail: true,
       };
     });
-    burstGlitter(x, y, 18);
+    burstGlitter(x, y, 14);
+    burstShards(x, y, 16);
   }
 
   function burstFireworks() {
@@ -2915,36 +2922,34 @@
     burstFirework(cx, cy);
     window.setTimeout(() => burstFirework(cx - 90, cy + 30), 160);
     window.setTimeout(() => burstFirework(cx + 95, cy + 20), 280);
-    window.setTimeout(() => burstFirework(cx - 40, cy - 40), 420);
-    window.setTimeout(() => burstConfetti(cx, cy, 50), 200);
+    window.setTimeout(() => burstShards(cx, cy, 28), 200);
   }
 
   function fxForClear(board, cleared, tSpin) {
     if (!flashyEnabled || !fxCtx) return;
     const o = boardOrigin(board);
-    // Line shower — dense enough to read on a full-bleed stage
-    const shower = cleared >= 4 ? 90 : cleared >= 3 ? 60 : cleared >= 2 ? 40 : 24;
-    burstDust(o.x, o.y, shower, '#d4af37');
-    burstDust(o.x, o.y + 20, (shower / 2) | 0, '#e8d9b5');
+    // Tight ash + brass — no rainbow confetti spam
+    const dustN = cleared >= 4 ? 28 : cleared >= 3 ? 18 : cleared >= 2 ? 12 : 8;
+    burstDust(o.x, o.y, dustN, '#d4af37');
     if (cleared >= 4 || tSpin >= 2) {
-      burstConfetti(o.x, o.y, tSpin ? 110 : 90);
-      burstGlitter(o.x, o.y, 64);
-      burstEmbers(o.x, o.y, tSpin ? 40 : 28);
-    } else if (cleared >= 3 || tSpin === 1) {
-      burstConfetti(o.x, o.y, 50);
-      burstGlitter(o.x, o.y, 36);
-      burstEmbers(o.x, o.y, 14);
-    } else if (cleared >= 2) {
+      burstShards(o.x, o.y, tSpin ? 42 : 34);
       burstGlitter(o.x, o.y, 28);
-      burstConfetti(o.x, o.y, 18);
+      burstEmbers(o.x, o.y, tSpin ? 18 : 12);
+    } else if (cleared >= 3 || tSpin === 1) {
+      burstShards(o.x, o.y, 22);
+      burstGlitter(o.x, o.y, 18);
+      burstEmbers(o.x, o.y, 8);
+    } else if (cleared >= 2) {
+      burstShards(o.x, o.y, 12);
+      burstGlitter(o.x, o.y, 14);
     } else if (cleared >= 1) {
-      burstGlitter(o.x, o.y, 16);
+      burstGlitter(o.x, o.y, 10);
     }
     if (board.combo >= 5) {
-      burstGlitter(o.x, o.y - 10, 55);
-      burstConfetti(o.x, o.y, 24);
+      burstGlitter(o.x, o.y - 10, 22);
+      burstShards(o.x, o.y, 10);
     } else if (board.combo >= 3) {
-      burstGlitter(o.x, o.y - 8, 36);
+      burstGlitter(o.x, o.y - 8, 14);
     }
   }
 
@@ -2974,25 +2979,48 @@
       const a = Math.max(0, Math.min(1, p.life / (p.max * 0.55)));
       fxCtx.globalAlpha = a;
       fxCtx.fillStyle = p.color;
-      if (p.kind === 'rect') {
+      if (p.kind === 'shard' || p.kind === 'rect') {
         fxCtx.save();
         fxCtx.translate(p.x, p.y);
         fxCtx.rotate(p.rot || 0);
-        fxCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        if (p.glow) {
+          fxCtx.globalAlpha = a * 0.22;
+          fxCtx.fillStyle = p.color;
+          fxCtx.beginPath();
+          fxCtx.ellipse(0, 0, p.w * 0.7, p.h * 2.2, 0, 0, Math.PI * 2);
+          fxCtx.fill();
+          fxCtx.globalAlpha = a;
+        }
+        // Thin diamond shard (brass flake)
+        fxCtx.beginPath();
+        fxCtx.moveTo(0, -p.w / 2);
+        fxCtx.lineTo(p.h / 2, 0);
+        fxCtx.lineTo(0, p.w / 2);
+        fxCtx.lineTo(-p.h / 2, 0);
+        fxCtx.closePath();
+        fxCtx.fill();
+        fxCtx.globalAlpha = a * 0.55;
+        fxCtx.fillStyle = '#fff6d0';
+        fxCtx.beginPath();
+        fxCtx.moveTo(0, -p.w / 2);
+        fxCtx.lineTo(p.h * 0.2, -p.w * 0.15);
+        fxCtx.lineTo(0, p.w * 0.1);
+        fxCtx.closePath();
+        fxCtx.fill();
         fxCtx.restore();
       } else if (p.kind === 'spark' || p.kind === 'dust') {
         fxCtx.beginPath();
         fxCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         fxCtx.fill();
         if (p.kind === 'spark') {
-          fxCtx.globalAlpha = a * 0.35;
+          fxCtx.globalAlpha = a * 0.3;
           fxCtx.beginPath();
-          fxCtx.arc(p.x, p.y, p.size * 2.4, 0, Math.PI * 2);
+          fxCtx.arc(p.x, p.y, p.size * 2.2, 0, Math.PI * 2);
           fxCtx.fill();
         }
       } else {
         if (p.trail) {
-          fxCtx.globalAlpha = a * 0.35;
+          fxCtx.globalAlpha = a * 0.3;
           fxCtx.beginPath();
           fxCtx.arc(p.x - p.vx * 1.4, p.y - p.vy * 1.4, p.size * 0.7, 0, Math.PI * 2);
           fxCtx.fill();
