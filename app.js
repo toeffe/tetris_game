@@ -81,6 +81,18 @@
   const NAME_KEY = 'vibetrisimo-name';
   const LANG_KEY = 'vibetrisimo-lang';
   const FLASHY_KEY = 'vibetrisimo-flashy';
+  const SHAKE_KEY = 'vibetrisimo-shake';
+  const CLEAR_FLASH_MS = 160;
+  const CLEAR_COLLAPSE_MS = 200;
+  const PIECE_LERP_MS = 42;
+  const LOCK_PULSE_MS = 140;
+  // Level bands deepen the dungeon palette (torch → ember → molten).
+  const LEVEL_THEMES = [
+    { tint: 'rgba(18,14,28,.08)', ember: 'rgba(120,70,30,.00)', warm: 'rgba(212,160,60,.18)', cool: 'rgba(70,40,90,.14)', glow: 'rgba(212,175,55,.14)' },
+    { tint: 'rgba(40,22,12,.12)', ember: 'rgba(160,70,20,.06)', warm: 'rgba(220,150,50,.24)', cool: 'rgba(80,35,70,.12)', glow: 'rgba(220,170,60,.18)' },
+    { tint: 'rgba(60,18,12,.16)', ember: 'rgba(200,60,25,.10)', warm: 'rgba(230,120,40,.28)', cool: 'rgba(90,30,50,.10)', glow: 'rgba(230,140,50,.22)' },
+    { tint: 'rgba(70,12,10,.20)', ember: 'rgba(220,50,20,.14)', warm: 'rgba(240,100,35,.32)', cool: 'rgba(100,25,40,.08)', glow: 'rgba(240,130,45,.28)' },
+  ];
 
   function storageGet(key) {
     try { return localStorage.getItem(key); } catch (_) { return null; }
@@ -176,6 +188,7 @@
       softLabel: 'Soft drop (ms)',
       settingsHint: 'Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.',
       settingsSaved: 'Saved',
+      shakeLabel: 'Screen shake',
       rotCcw: '↺',
       rotCw: '↻',
       rematchStart: 'Starting…',
@@ -284,6 +297,7 @@
       softLabel: 'Blødt fald (ms)',
       settingsHint: 'Lavere DAS/ARR = hurtigere bevægelse. Blødt fald gentages mens tasten holdes.',
       settingsSaved: 'Gemt',
+      shakeLabel: 'Skærmryst',
       rotCcw: '↺',
       rotCw: '↻',
       rematchStart: 'Starter…',
@@ -337,12 +351,92 @@
 
   let flashyEnabled = detectFlashy();
 
+  function detectShake() {
+    try {
+      const saved = storageGet(SHAKE_KEY);
+      if (saved === '0') return false;
+      if (saved === '1') return true;
+    } catch (_) {}
+    return true;
+  }
+
+  let shakeEnabled = detectShake();
+
   function setFlashy(on) {
     flashyEnabled = !!on;
     storageSet(FLASHY_KEY, flashyEnabled ? '1' : '0');
     const chk = document.getElementById('chkFlashy');
     if (chk) chk.checked = flashyEnabled;
     if (!flashyEnabled) clearFxParticles();
+  }
+
+  function setShake(on) {
+    shakeEnabled = !!on;
+    storageSet(SHAKE_KEY, shakeEnabled ? '1' : '0');
+    const chk = document.getElementById('chkShake');
+    if (chk) chk.checked = shakeEnabled;
+  }
+
+  function fxMotionOk() {
+    return flashyEnabled && !(typeof reduceMotion === 'function' && reduceMotion());
+  }
+
+  /* ---------- stage FX: shake / hit-stop / level theme ---------- */
+  let hitStopLeft = 0;
+  let shakeState = { mag: 0, until: 0, dur: 220 };
+  let stageParallax = { x: 0, y: 0 };
+
+  function triggerHitStop(ms) {
+    if (!fxMotionOk()) return;
+    hitStopLeft = Math.max(hitStopLeft, ms);
+  }
+
+  function triggerShake(intensity) {
+    if (!shakeEnabled || !fxMotionOk()) return;
+    const mag = Math.max(0, intensity);
+    if (mag >= shakeState.mag || performance.now() > shakeState.until) {
+      shakeState.mag = mag;
+      shakeState.dur = 180 + mag * 12;
+      shakeState.until = performance.now() + shakeState.dur;
+    }
+  }
+
+  function themeForLevel(level) {
+    const idx = Math.min(LEVEL_THEMES.length - 1, Math.max(0, ((level - 1) / 5) | 0));
+    return LEVEL_THEMES[idx];
+  }
+
+  function applyStagePresentation(now) {
+    const stage = document.querySelector('.game-stage');
+    if (!stage) return;
+    const local = boards.find(b => b.live);
+    const level = (local && local.level) || 1;
+    const theme = themeForLevel(level);
+    const root = document.documentElement;
+    root.style.setProperty('--stage-tint', theme.tint);
+    root.style.setProperty('--stage-ember', theme.ember);
+    root.style.setProperty('--torch-warm', theme.warm);
+    root.style.setProperty('--torch-cool', theme.cool);
+    root.style.setProperty('--well-glow', theme.glow);
+
+    if (fxMotionOk()) {
+      stageParallax.x = Math.sin(now / 9000) * (5 + level * 0.35) + Math.sin(now / 2300) * 1.2;
+      stageParallax.y = Math.cos(now / 12000) * (4 + level * 0.25) + Math.cos(now / 3100) * 0.9;
+    } else {
+      stageParallax.x = 0;
+      stageParallax.y = 0;
+    }
+
+    let tx = 0, ty = 0;
+    if (shakeEnabled && shakeState.until > now) {
+      const p = (shakeState.until - now) / shakeState.dur;
+      const m = shakeState.mag * p * p;
+      tx = (Math.random() - 0.5) * 2 * m;
+      ty = (Math.random() - 0.5) * 2 * m;
+    }
+    stage.style.backgroundPosition =
+      'center, center, calc(50% + ' + stageParallax.x.toFixed(2) + 'px) calc(48% + ' + stageParallax.y.toFixed(2) + 'px)';
+    stage.style.transform = 'translate3d(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px,0)';
   }
 
   function t(key, vars) {
@@ -626,26 +720,55 @@
 
   function drawBlock(ctx, x, y, cell, size, opts) {
     const ghost = opts && opts.ghost;
+    const pulse = (opts && opts.pulse) || 0;
     const type = cellType(cell) || (typeof cell === 'string' && cell.charAt(0) === '#' ? null : cell);
     const iron = type === GARBAGE_TYPE || cell === GARBAGE_COLOR;
     const gap = Math.max(1, (size * .06) | 0);
-    const px = x * size + gap, py = y * size + gap;
-    const w = size - gap * 2, h = size - gap * 2;
+    let px = x * size + gap, py = y * size + gap;
+    let w = size - gap * 2, h = size - gap * 2;
     if (w < 2 || h < 2) return;
+
+    if (pulse > 0) {
+      const sx = 1 + pulse * 0.1;
+      const sy = 1 - pulse * 0.14;
+      const cx = px + w / 2, cy = py + h / 2;
+      px = cx - (w * sx) / 2;
+      py = cy - (h * sy) / 2;
+      w *= sx;
+      h *= sy;
+    }
+
+    const color = iron ? GARBAGE_COLOR : (SHAPES[type] && SHAPES[type].color) || (typeof cell === 'string' ? cell : '#888');
+
+    // Soft inner glow plate under the block (skip ghosts / tiny cells)
+    if (!ghost && !iron && size >= 12) {
+      const rgb = hexToRgb(color);
+      ctx.fillStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + (0.16 + pulse * 0.2) + ')';
+      ctx.beginPath();
+      ctx.arc(px + w / 2, py + h / 2, Math.max(w, h) * 0.62, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     const img = !iron && type && BLOCK_IMGS[type];
     if (img && img.complete && img.naturalWidth > 0) {
       const prev = ctx.globalAlpha;
       if (ghost) ctx.globalAlpha = prev * 0.38;
       ctx.drawImage(img, px, py, w, h);
+      if (!ghost) {
+        // Specular edge polish over the sprite
+        const bevel = Math.max(1, (size * .14) | 0);
+        ctx.fillStyle = 'rgba(255,240,200,' + (0.14 + pulse * 0.2) + ')';
+        ctx.fillRect(px + 1, py + 1, Math.max(1, w - 2), bevel);
+        ctx.fillStyle = 'rgba(0,0,0,.28)';
+        ctx.fillRect(px + 1, py + h - bevel, Math.max(1, w - 2), bevel);
+      }
       ctx.globalAlpha = prev;
       return;
     }
 
     // Fallback: procedural bevel (also used for garbage / unloaded sprites)
-    const color = iron ? GARBAGE_COLOR : (SHAPES[type] && SHAPES[type].color) || (typeof cell === 'string' ? cell : '#888');
     const rgb = hexToRgb(color);
-    const g = grit(x, y);
+    const g = grit(x | 0, y | 0);
     const face = ghost ? shadeRgb(rgb, .55 + g) : shadeRgb(rgb, .92 + g);
     const hi = ghost ? 'rgba(220,200,160,.12)' : iron ? 'rgba(180,170,150,.18)' : 'rgba(255,235,180,.35)';
     const lo = iron ? 'rgba(0,0,0,.45)' : 'rgba(0,0,0,.4)';
@@ -757,6 +880,13 @@
       this.lastKick = 0;
       this.flashUntil = 0;
       this.flashKind = null;
+      this.visX = 0;
+      this.visY = -BUFFER_ROWS;
+      this.visSnap = true;
+      this.lockPulse = 0;
+      this.settleCells = null;
+      this.clearAnim = null;
+      this.rowDrawY = null; // per-row visual Y offset during collapse
       this.spawn();
       this.paintHud();
       if (this.els.over) this.els.over.textContent = '';
@@ -784,6 +914,10 @@
       const type = this.queue.shift();
       this.fillQueue();
       this.piece = this.makePiece(type);
+      this.visX = this.piece.x;
+      this.visY = this.piece.y;
+      this.visSnap = true;
+      this.lockPulse = 0;
       this.canHold = true;
       this.acc = 0;
       this.lockAcc = 0;
@@ -795,6 +929,21 @@
         if (this.els.over) this.els.over.textContent = t('topOut');
         onTopOut(this);
       }
+    }
+
+    syncVis(snap) {
+      if (!this.piece) return;
+      if (snap || this.visSnap) {
+        this.visX = this.piece.x;
+        this.visY = this.piece.y;
+        this.visSnap = false;
+        return;
+      }
+      const k = Math.min(1, 16 / PIECE_LERP_MS);
+      this.visX += (this.piece.x - this.visX) * k;
+      this.visY += (this.piece.y - this.visY) * k;
+      if (Math.abs(this.visX - this.piece.x) < 0.02) this.visX = this.piece.x;
+      if (Math.abs(this.visY - this.piece.y) < 0.02) this.visY = this.piece.y;
     }
 
     grounded() {
@@ -850,7 +999,7 @@
     }
 
     canPlay() {
-      return this.live && !this.over && !ended && matchPhase === 'playing';
+      return this.live && !this.over && !ended && matchPhase === 'playing' && !this.clearAnim;
     }
 
     hold() {
@@ -863,6 +1012,9 @@
         const swap = this.holdType;
         this.holdType = curType;
         this.piece = this.makePiece(swap);
+        this.visX = this.piece.x;
+        this.visY = this.piece.y;
+        this.visSnap = true;
         this.acc = 0;
         this.lockAcc = 0;
         this.lockResets = 0;
@@ -983,19 +1135,104 @@
       this.score += d * 2;
       this.lockAcc = 0;
       this.lastAction = 'drop';
+      this.visSnap = true;
+      this.syncVis(true);
+      if (d > 0) fxForHardDrop(this, d);
       this.lock();
+    }
+
+    findFullRows() {
+      const rows = [];
+      for (let r = 0; r < ROWS; r++) {
+        if (this.grid[r].every(Boolean)) rows.push(r);
+      }
+      return rows;
+    }
+
+    collapseRows(rows) {
+      if (!rows || !rows.length) return 0;
+      const skip = new Set(rows);
+      const next = [];
+      for (let r = 0; r < ROWS; r++) {
+        if (!skip.has(r)) next.push(this.grid[r]);
+      }
+      while (next.length < ROWS) next.unshift(Array(COLS).fill(null));
+      this.grid = next;
+      return rows.length;
+    }
+
+    finishClearAnim() {
+      const anim = this.clearAnim;
+      if (!anim) return;
+      this.collapseRows(anim.rows);
+      this.rowDrawY = null;
+      this.clearAnim = null;
+      if (anim.pendingGarbage) {
+        this.applyGarbage(anim.pendingGarbage);
+      }
+      if (!this.over) this.spawn();
+      this.paintHud();
+      syncState(this, true);
+    }
+
+    beginClearAnim(rows, pendingGarbage) {
+      if (!fxMotionOk()) {
+        this.collapseRows(rows);
+        if (pendingGarbage) this.applyGarbage(pendingGarbage);
+        if (!this.over) this.spawn();
+        return;
+      }
+      this.piece = null;
+      this.clearAnim = {
+        rows: rows.slice(),
+        t: 0,
+        flashMs: CLEAR_FLASH_MS,
+        collapseMs: CLEAR_COLLAPSE_MS,
+        pendingGarbage: pendingGarbage || 0,
+      };
+      this.rowDrawY = Array(ROWS).fill(0);
+    }
+
+    tickClearAnim(dt) {
+      const anim = this.clearAnim;
+      if (!anim) return;
+      anim.t += dt;
+      const flashEnd = anim.flashMs;
+      const total = anim.flashMs + anim.collapseMs;
+      if (anim.t < flashEnd) {
+        // hold rows in place while flashing
+        if (this.rowDrawY) for (let i = 0; i < ROWS; i++) this.rowDrawY[i] = 0;
+      } else if (anim.t < total) {
+        const p = (anim.t - flashEnd) / anim.collapseMs;
+        const ease = p * p;
+        const dying = new Set(anim.rows);
+        let fall = 0;
+        // From bottom: each cleared row adds one cell of fall for rows above
+        for (let r = ROWS - 1; r >= 0; r--) {
+          if (dying.has(r)) {
+            fall += 1;
+            this.rowDrawY[r] = ease * 0.35; // slight sink while fading
+          } else {
+            this.rowDrawY[r] = ease * fall;
+          }
+        }
+      } else {
+        this.finishClearAnim();
+      }
     }
 
     lock() {
       const {m, x, y, type} = this.piece;
       const tSpin = this.detectTSpin();
       let placed = 0;
+      const placedCells = [];
       for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) {
         if (!m[r][c]) continue;
         const gx = x + c, gy = y + r;
         if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) {
           this.grid[gy][gx] = type;
           placed++;
+          placedCells.push({x: gx, y: gy});
         }
       }
       // Lock-out: piece settled entirely in the sky buffer — no recovery.
@@ -1007,12 +1244,16 @@
         onTopOut(this);
         return;
       }
+      this.lockPulse = 1;
+      this.settleCells = placedCells;
       this.flashUntil = performance.now() + 120;
       this.flashKind = 'lock';
-      const cleared = this.clearLines();
+      fxForLock(this, placedCells);
+      const fullRows = this.findFullRows();
+      const cleared = fullRows.length;
+      let pendingGarbage = 0;
       if (cleared > 0) {
         let base = clearScore(cleared, tSpin);
-        // Difficult clears: Tetris or any T-spin with lines (eligible for B2B)
         const difficult = cleared === 4 || tSpin > 0;
         const b2bAwarded = difficult && this.b2b;
         if (b2bAwarded) base = (base * 1.5) | 0;
@@ -1022,41 +1263,36 @@
         this.lines += cleared;
         this.b2b = difficult;
         this.updateSpeed();
-        if (navigator.vibrate) navigator.vibrate(30);
+        if (navigator.vibrate) navigator.vibrate(cleared >= 4 || tSpin ? 45 : 30);
         const g = GARBAGE[cleared] || 0;
         if (g) sendGarbage(this, g);
         if (powerUpsEnabled) maybeGrantPowerUp(this, cleared);
         this.flashUntil = performance.now() + 200;
         this.flashKind = 'clear';
         showClearFx(this, cleared, tSpin, b2bAwarded);
+        // Impact scaling: singles soft, Tetris / T-spin heavy
+        const impact = tSpin ? 7 + cleared : (cleared >= 4 ? 8 : cleared >= 3 ? 5 : cleared >= 2 ? 3 : 1.5);
+        triggerShake(impact);
+        if (cleared >= 4 || tSpin >= 2) triggerHitStop(cleared >= 4 || tSpin >= 2 ? 70 : 45);
+        else if (cleared >= 3) triggerHitStop(35);
+        pendingGarbage = this.gQueue;
+        this.gQueue = 0;
+        this.beginClearAnim(fullRows, pendingGarbage);
       } else {
         if (tSpin) {
           this.score += clearScore(0, tSpin) * this.level;
           showClearFx(this, 0, tSpin, false);
+          triggerShake(3);
         }
         this.combo = 0;
-        // Non-clearing locks (incl. T-spin 0) do not break Back-to-Back
+        if (this.gQueue) {
+          this.applyGarbage(this.gQueue);
+          this.gQueue = 0;
+        }
+        if (!this.over) this.spawn();
       }
-      if (this.gQueue) {
-        this.applyGarbage(this.gQueue);
-        this.gQueue = 0;
-      }
-      if (!this.over) this.spawn();
       this.paintHud();
       syncState(this, true);
-    }
-
-    clearLines() {
-      let n = 0;
-      for (let r = ROWS - 1; r >= 0; r--) {
-        if (this.grid[r].every(Boolean)) {
-          this.grid.splice(r, 1);
-          this.grid.unshift(Array(COLS).fill(null));
-          n++;
-          r++;
-        }
-      }
-      return n;
     }
 
     addGarbage(n) {
@@ -1087,6 +1323,15 @@
     }
 
     tick(dt) {
+      if (!this.live || this.over || ended || matchPhase !== 'playing') return;
+      if (this.lockPulse > 0) {
+        this.lockPulse = Math.max(0, this.lockPulse - dt / LOCK_PULSE_MS);
+        if (this.lockPulse <= 0) this.settleCells = null;
+      }
+      if (this.clearAnim) {
+        this.tickClearAnim(dt);
+        return;
+      }
       if (!this.canPlay()) return;
       this.elapsed += dt;
       if (this.updateSpeed()) this.paintHud();
@@ -1174,6 +1419,7 @@
     draw() {
       const ctx = this.ctx, s = this.block;
       const bw = COLS * s, bh = ROWS * s;
+      this.syncVis(false);
       ctx.clearRect(0, 0, bw, bh);
       // Void floor matching the chamber well (not a flat UI screen)
       const floor = ctx.createLinearGradient(0, 0, 0, bh);
@@ -1182,15 +1428,16 @@
       floor.addColorStop(1, '#050408');
       ctx.fillStyle = floor;
       ctx.fillRect(0, 0, bw, bh);
-      // Soft side wash from room torches (purple left / warm right)
+      const theme = themeForLevel(this.level || 1);
+      // Soft side wash from room torches — shifts with level theme
       const sideWash = ctx.createLinearGradient(0, 0, bw, 0);
-      sideWash.addColorStop(0, 'rgba(90,40,120,.10)');
+      sideWash.addColorStop(0, theme.cool);
       sideWash.addColorStop(.18, 'rgba(0,0,0,0)');
       sideWash.addColorStop(.82, 'rgba(0,0,0,0)');
-      sideWash.addColorStop(1, 'rgba(160,100,30,.10)');
+      sideWash.addColorStop(1, theme.warm);
       ctx.fillStyle = sideWash;
       ctx.fillRect(0, 0, bw, bh);
-      ctx.strokeStyle = 'rgba(180,150,70,.18)';
+      ctx.strokeStyle = 'rgba(180,150,70,.16)';
       ctx.lineWidth = 1;
       for (let x = 0; x <= COLS; x++) {
         ctx.beginPath(); ctx.moveTo(x * s + .5, 0); ctx.lineTo(x * s + .5, bh); ctx.stroke();
@@ -1198,12 +1445,45 @@
       for (let y = 0; y <= ROWS; y++) {
         ctx.beginPath(); ctx.moveTo(0, y * s + .5); ctx.lineTo(bw, y * s + .5); ctx.stroke();
       }
-      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-        if (this.grid[r][c]) drawBlock(ctx, c, r, this.grid[r][c], s);
+
+      const anim = this.clearAnim;
+      const dying = anim ? new Set(anim.rows) : null;
+      const flashP = anim && anim.t < anim.flashMs ? 1 - (anim.t / anim.flashMs) : 0;
+      const settling = (this.lockPulse > 0 && this.settleCells)
+        ? new Set(this.settleCells.map(c => c.x + ',' + c.y))
+        : null;
+
+      for (let r = 0; r < ROWS; r++) {
+        const yOff = (this.rowDrawY && this.rowDrawY[r]) || 0;
+        for (let c = 0; c < COLS; c++) {
+          if (!this.grid[r][c]) continue;
+          const isDying = dying && dying.has(r);
+          const settlePulse = settling && settling.has(c + ',' + r) ? this.lockPulse : 0;
+          if (isDying && flashP > 0) {
+            const prev = ctx.globalAlpha;
+            ctx.globalAlpha = prev * (0.35 + flashP * 0.65);
+            drawBlock(ctx, c, r + yOff, this.grid[r][c], s, {pulse: flashP});
+            ctx.globalAlpha = prev;
+            // Brass flash overlay on clearing rows
+            ctx.fillStyle = 'rgba(240,220,160,' + (flashP * 0.55) + ')';
+            ctx.fillRect(c * s, (r + yOff) * s, s, s);
+          } else if (isDying) {
+            const collapseP = Math.min(1, Math.max(0, (anim.t - anim.flashMs) / anim.collapseMs));
+            const prev = ctx.globalAlpha;
+            ctx.globalAlpha = prev * (1 - collapseP);
+            drawBlock(ctx, c, r + yOff, this.grid[r][c], s);
+            ctx.globalAlpha = prev;
+          } else {
+            drawBlock(ctx, c, r + yOff, this.grid[r][c], s, {pulse: settlePulse});
+          }
+        }
       }
-      if (this.piece && !this.over) {
+
+      if (this.piece && !this.over && !anim) {
         const gy = this.ghostY();
         const pType = this.piece.type;
+        const vx = this.visX;
+        const vy = this.visY;
         for (let r = 0; r < this.piece.m.length; r++) for (let c = 0; c < this.piece.m.length; c++) {
           if (!this.piece.m[r][c]) continue;
           const gRow = gy + r;
@@ -1211,10 +1491,11 @@
         }
         for (let r = 0; r < this.piece.m.length; r++) for (let c = 0; c < this.piece.m.length; c++) {
           if (!this.piece.m[r][c]) continue;
-          const row = this.piece.y + r;
-          if (row >= 0) drawBlock(ctx, this.piece.x + c, row, pType, s);
+          const row = vy + r;
+          if (row > -1) drawBlock(ctx, vx + c, row, pType, s, {pulse: this.lockPulse});
         }
       }
+
       // Deep stone recess — edges fall into the chamber shadow
       const vg = ctx.createRadialGradient(bw / 2, bh * .42, Math.min(bw, bh) * .18, bw / 2, bh * .5, Math.max(bw, bh) * .78);
       vg.addColorStop(0, 'rgba(0,0,0,0)');
@@ -1660,6 +1941,8 @@
     if (rngDas) { rngDas.value = String(DAS_MS); if (outDas) outDas.textContent = String(DAS_MS); }
     if (rngArr) { rngArr.value = String(ARR_MS); if (outArr) outArr.textContent = String(ARR_MS); }
     if (rngSoft) { rngSoft.value = String(SOFT_MS); if (outSoft) outSoft.textContent = String(SOFT_MS); }
+    const chkShake = $('chkShake');
+    if (chkShake) chkShake.checked = shakeEnabled;
   }
 
   function showSettings() {
@@ -1862,12 +2145,18 @@
     // Focused: clamp spikes. Hidden: allow larger dt so throttled timers still catch up.
     const maxDt = document.hidden ? 2000 : 100;
     dt = Math.min(Math.max(0, dt), maxDt);
+    if (hitStopLeft > 0) {
+      hitStopLeft -= dt;
+      return;
+    }
     if (!document.hidden) tickHeldKeys(dt);
     for (const b of boards) if (b.live) b.tick(dt);
   }
 
   function drawLoop() {
+    const now = performance.now();
     for (const b of boards) b.draw();
+    if (document.body.classList.contains('in-game')) applyStagePresentation(now);
     raf = requestAnimationFrame(drawLoop);
   }
 
@@ -2403,7 +2692,7 @@
     el.className = 'fx-toast' + (kind ? ' ' + kind : '');
     el.textContent = text;
     root.appendChild(el);
-    window.setTimeout(() => el.remove(), 900);
+    window.setTimeout(() => el.remove(), 1000);
   }
 
   /* ---------- particle FX (confetti / glitter / fireworks) ---------- */
@@ -2454,6 +2743,58 @@
       return {x: r.left + r.width / 2, y: r.top + r.height * 0.42};
     }
     return {x: window.innerWidth / 2, y: window.innerHeight * 0.4};
+  }
+
+  function boardCellScreen(board, col, row) {
+    const canvas = board && board.ctx && board.ctx.canvas;
+    if (!canvas) return boardOrigin(board);
+    const r = canvas.getBoundingClientRect();
+    const s = r.width / COLS;
+    return {x: r.left + (col + 0.5) * s, y: r.top + (row + 0.5) * s};
+  }
+
+  function burstDust(x, y, count, color) {
+    spawnBurst(x, y, count, () => {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
+      const spd = 0.6 + Math.random() * 2.8;
+      return {
+        kind: 'dust',
+        x: x + (Math.random() - 0.5) * 10,
+        y: y + (Math.random() - 0.5) * 6,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd * 0.4,
+        g: 0.08,
+        life: 0.25 + Math.random() * 0.35,
+        max: 0,
+        size: 1 + Math.random() * 2.2,
+        color: color || 'rgba(200,180,140,.7)',
+      };
+    });
+  }
+
+  function fxForHardDrop(board, dist) {
+    if (!fxMotionOk() || !fxCtx || !board.piece) return;
+    const cells = [];
+    const {m, x, y, type} = board.piece;
+    for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) {
+      if (!m[r][c]) continue;
+      const gy = y + r;
+      if (gy >= 0) cells.push({x: x + c, y: gy});
+    }
+    const color = (SHAPES[type] && SHAPES[type].color) || '#c9a227';
+    cells.forEach(cell => {
+      const p = boardCellScreen(board, cell.x, cell.y);
+      burstDust(p.x, p.y, Math.min(8, 3 + (dist / 4) | 0), color);
+    });
+    if (dist >= 8) triggerShake(2.5);
+  }
+
+  function fxForLock(board, cells) {
+    if (!fxMotionOk() || !fxCtx || !cells || !cells.length) return;
+    cells.forEach(cell => {
+      const p = boardCellScreen(board, cell.x, cell.y);
+      burstDust(p.x, p.y, 2, 'rgba(220,200,150,.55)');
+    });
   }
 
   function pushParticle(p) {
@@ -2560,14 +2901,25 @@
     window.setTimeout(() => burstConfetti(cx, cy, 50), 200);
   }
 
-  function fxForClear(board, cleared) {
+  function fxForClear(board, cleared, tSpin) {
     if (!flashyEnabled || !fxCtx) return;
     const o = boardOrigin(board);
-    if (cleared >= 4) {
-      burstConfetti(o.x, o.y, 70);
-      burstGlitter(o.x, o.y, 40);
-    } else if (cleared >= 3) {
-      burstConfetti(o.x, o.y, 32);
+    // Line shower — more particles for bigger clears
+    const shower = cleared >= 4 ? 56 : cleared >= 3 ? 36 : cleared >= 2 ? 22 : 12;
+    for (let i = 0; i < shower; i++) {
+      const x = o.x + (Math.random() - 0.5) * 120;
+      const y = o.y + (Math.random() - 0.5) * 40;
+      burstDust(x, y, 1, Math.random() > 0.5 ? '#d4af37' : '#e8d9b5');
+    }
+    if (cleared >= 4 || tSpin >= 2) {
+      burstConfetti(o.x, o.y, tSpin ? 90 : 70);
+      burstGlitter(o.x, o.y, 48);
+      burstEmbers(o.x, o.y, tSpin ? 28 : 18);
+    } else if (cleared >= 3 || tSpin === 1) {
+      burstConfetti(o.x, o.y, 36);
+      burstGlitter(o.x, o.y, 22);
+    } else if (cleared >= 2) {
+      burstGlitter(o.x, o.y, 18);
     }
     if (board.combo >= 5) {
       burstGlitter(o.x, o.y - 10, 55);
@@ -2609,14 +2961,16 @@
         fxCtx.rotate(p.rot || 0);
         fxCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
         fxCtx.restore();
-      } else if (p.kind === 'spark') {
+      } else if (p.kind === 'spark' || p.kind === 'dust') {
         fxCtx.beginPath();
         fxCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         fxCtx.fill();
-        fxCtx.globalAlpha = a * 0.35;
-        fxCtx.beginPath();
-        fxCtx.arc(p.x, p.y, p.size * 2.4, 0, Math.PI * 2);
-        fxCtx.fill();
+        if (p.kind === 'spark') {
+          fxCtx.globalAlpha = a * 0.35;
+          fxCtx.beginPath();
+          fxCtx.arc(p.x, p.y, p.size * 2.4, 0, Math.PI * 2);
+          fxCtx.fill();
+        }
       } else {
         if (p.trail) {
           fxCtx.globalAlpha = a * 0.35;
@@ -2671,7 +3025,7 @@
         if (flashyEnabled) showBoardToast(board, t('comboN', {n: board.combo}), 'combo');
       }, 120);
     }
-    fxForClear(board, cleared);
+    fxForClear(board, cleared, tSpin || 0);
   }
 
   function showHitFx(toId, n) {
@@ -3493,6 +3847,11 @@
   if (chkFlashy) {
     chkFlashy.checked = flashyEnabled;
     chkFlashy.addEventListener('change', () => setFlashy(chkFlashy.checked));
+  }
+  const chkShake = $('chkShake');
+  if (chkShake) {
+    chkShake.checked = shakeEnabled;
+    chkShake.addEventListener('change', () => setShake(chkShake.checked));
   }
   applyI18n();
 })();

@@ -14,8 +14,11 @@
 }
 
 :root{
+  /* —— Art direction: dark-fantasy dungeon (carved stone, brass, torchlight) —— */
   --font-display:'Cinzel Decorative','Palatino Linotype',Palatino,Georgia,serif;
   --font-body:'Cinzel','Palatino Linotype',Palatino,Georgia,serif;
+
+  /* Color palette */
   --gold:#d4af37;
   --brass:#c9a227;
   --bronze:#8b6914;
@@ -31,6 +34,33 @@
   --wood-dark:#3d2514;
   --stone-light:#9a9590;
   --stone-dark:#3a3836;
+  --torch-warm:rgba(212,160,60,.22);
+  --torch-cool:rgba(70,40,90,.16);
+  --stage-tint:rgba(20,14,10,.0);
+  --stage-ember:rgba(180,80,30,.0);
+  --well-glow:rgba(212,175,55,.14);
+
+  /* Spacing scale */
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:24px;
+  --space-6:32px;
+
+  /* Motion tokens */
+  --ease-out:cubic-bezier(.2,.9,.2,1);
+  --ease-impact:cubic-bezier(.15,1.35,.35,1);
+  --ease-soft:cubic-bezier(.4,0,.2,1);
+  --dur-fast:120ms;
+  --dur-med:280ms;
+  --dur-slow:550ms;
+
+  /* Depth / glow */
+  --shadow-panel:0 22px 50px rgba(0,0,0,.65), 0 40px 80px rgba(0,0,0,.35);
+  --glow-gold:0 0 18px rgba(212,175,55,.35);
+  --glow-ember:0 0 22px rgba(200,80,40,.4);
+
   --tex-stone:url('./textures/stone.svg');
   --tex-wood:url('./textures/wood.svg');
   --tex-parchment:url('./textures/parchment.svg');
@@ -560,12 +590,26 @@ body.in-game #game{
   padding:52px 0 120px;
   background-color:#08060a;
   background-image:
+    linear-gradient(180deg, var(--stage-tint), var(--stage-ember)),
     radial-gradient(ellipse at 50% 48%, transparent 32%, rgba(0,0,0,.22) 100%),
     var(--tex-game);
-  background-size:auto, cover;
-  background-position:center, center center;
-  background-repeat:no-repeat, no-repeat;
-  transform:none;
+  background-size:auto, auto, cover;
+  background-position:center, center, center center;
+  background-repeat:no-repeat, no-repeat, no-repeat;
+  transform:translate3d(0,0,0);
+  will-change:transform, background-position;
+}
+.game-stage::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:1;
+  background:
+    radial-gradient(ellipse at 18% 70%, var(--torch-cool), transparent 42%),
+    radial-gradient(ellipse at 82% 68%, var(--torch-warm), transparent 40%);
+  opacity:.85;
+  transition:opacity var(--dur-slow) var(--ease-soft);
 }
 .game-stage .player.board-host{
   position:relative;
@@ -900,30 +944,30 @@ body.in-game #ctrlHint:has(+ #btnAgain:not([hidden])){
   left:50%;
   top:42%;
   z-index:5;
-  transform:translate(-50%,-40%);
+  transform:translate(-50%,-40%) scale(.7);
   pointer-events:none;
-  font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-  font-size:clamp(14px,2.4vw,22px);
-  font-weight:800;
-  letter-spacing:.06em;
+  font-family:var(--font-display),var(--font-body);
+  font-size:clamp(15px,2.6vw,24px);
+  font-weight:700;
+  letter-spacing:.14em;
   text-transform:uppercase;
   color:var(--parchment);
-  text-shadow:0 2px 0 #3d2a00,0 4px 12px rgba(0,0,0,.65);
+  text-shadow:0 2px 0 #3d2a00,0 4px 14px rgba(0,0,0,.7), var(--glow-gold);
   white-space:nowrap;
-  animation:fx-toast-rise .85s ease-out forwards;
+  animation:fx-toast-rise .95s var(--ease-impact) forwards;
   -webkit-font-smoothing:antialiased;
 }
-.fx-toast.tetris{color:var(--gold);font-size:clamp(18px,3vw,28px);}
+.fx-toast.tetris{color:var(--gold);font-size:clamp(20px,3.2vw,32px);text-shadow:0 2px 0 #3d2a00,0 0 24px rgba(212,175,55,.55),0 6px 18px rgba(0,0,0,.7);}
 .fx-toast.triple{color:#e8c76a;}
-.fx-toast.combo{color:#7ec8ff;top:52%;}
+.fx-toast.combo{color:#e0c878;top:54%;font-size:clamp(13px,2vw,18px);}
 .fx-toast.hit{color:#e06060;top:48%;}
 .fx-toast.power{color:var(--gold);top:42%;}
 .fx-toast.shield{color:#c9a86a;top:42%;}
 @keyframes fx-toast-rise{
-  0%{opacity:0;transform:translate(-50%,-20%) scale(.86);}
-  18%{opacity:1;transform:translate(-50%,-45%) scale(1.06);}
-  70%{opacity:1;transform:translate(-50%,-70%) scale(1);}
-  100%{opacity:0;transform:translate(-50%,-95%) scale(.96);}
+  0%{opacity:0;transform:translate(-50%,-10%) scale(.55);filter:blur(2px);}
+  16%{opacity:1;transform:translate(-50%,-48%) scale(1.14);filter:blur(0);}
+  55%{opacity:1;transform:translate(-50%,-62%) scale(1);}
+  100%{opacity:0;transform:translate(-50%,-92%) scale(.92);filter:blur(.5px);}
 }
 .player h2{
   margin:0 0 6px;
@@ -1363,7 +1407,7 @@ canvas{
   #banner:not([hidden]){animation:none;opacity:1;transform:translate(-50%,-50%) scale(1);}
   .player.tablet.hit-pulse,
   .player.board-host.hit-pulse .board-table{animation:none;}
-  .fx-toast{animation:none;opacity:1;transform:translate(-50%,-50%);}
+  .fx-toast{animation:none;opacity:1;transform:translate(-50%,-50%) scale(1);filter:none;}
   .title{-webkit-text-fill-color:var(--gold);background:none;color:var(--gold);}
   .panel.panel-exit,
   #game.game-entering .game-stage,
@@ -1372,6 +1416,8 @@ canvas{
   #countdown .countdown-num,
   #countdown .countdown-num::before{animation:none;}
   #countdown{transition:none;opacity:1;}
+  .game-stage{will-change:auto;}
+  .game-stage::after{transition:none;}
 }
 
 .setting-row[hidden]{
@@ -1439,4 +1485,25 @@ canvas{
 }
 .alcove canvas.next{
   height:auto;
+}
+.setting-check{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:12px 0 4px;
+  font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-size:13px;
+  font-weight:600;
+  color:var(--parchment);
+  cursor:pointer;
+  user-select:none;
+}
+.setting-check input{
+  width:16px;
+  height:16px;
+  accent-color:var(--gold);
+  cursor:pointer;
+}
+.well-frame canvas.main{
+  outline-color:var(--well-glow) !important;
 }
