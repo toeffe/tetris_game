@@ -60,6 +60,14 @@
   const LOCK_DELAY_RATIO = 0.5;
   const MIN_LOCK_MS = 200;
   const MAX_LOCK_MS = 450;
+  const LOCK_RESET_LIMIT = 15; // move/rotate resets while grounded (Infinity-style)
+  const NEXT_COUNT = 3;
+  const DAS_KEY = 'vibetrisimo-das';
+  const ARR_KEY = 'vibetrisimo-arr';
+  const SOFT_KEY = 'vibetrisimo-soft';
+  const DEFAULT_DAS_MS = 160;
+  const DEFAULT_ARR_MS = 50;
+  const DEFAULT_SOFT_MS = 40;
   const GARBAGE_TARGET = { clockwise: 1, random: 1, neighbors: 1 };
   const POWER_GRACE_MS = 10000;
   const POWER_CHANCE = { 2: 0.12, 3: 0.25, 4: 0.40 };
@@ -117,6 +125,13 @@
       clearDouble: 'Double',
       clearTriple: 'Triple',
       clearTetris: 'Tetris!',
+      tspin: 'T-Spin',
+      tspinMini: 'T-Spin Mini',
+      tspinMiniClear: 'T-Spin Mini',
+      tspinSingle: 'T-Spin Single',
+      tspinDouble: 'T-Spin Double',
+      tspinTriple: 'T-Spin Triple',
+      b2b: 'B2B',
       comboN: 'Combo x{n}',
       hitFx: 'HIT +{n}',
       flashyFx: 'FX',
@@ -153,7 +168,16 @@
       waitReady: ' · waiting for ready',
       startingSoon: ' · starting…',
       go: 'FIGHT!',
-      ctrlHint: 'WASD / arrows + space · C keep · V relic · last survivor wins',
+      ctrlHint: 'WASD / arrows · Z/X rotate · space hard · C keep · V relic',
+      settings: 'Settings',
+      settingsTitle: 'Controls',
+      dasLabel: 'DAS (ms)',
+      arrLabel: 'ARR (ms)',
+      softLabel: 'Soft drop (ms)',
+      settingsHint: 'Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.',
+      settingsSaved: 'Saved',
+      rotCcw: '↺',
+      rotCw: '↻',
       rematchStart: 'Starting…',
       rematchWait: 'Waiting for others ({ready}/{n})…',
       rematchPartial: '{ready}/{n} ready',
@@ -209,6 +233,13 @@
       clearDouble: 'Double',
       clearTriple: 'Triple',
       clearTetris: 'Tetris!',
+      tspin: 'T-Spin',
+      tspinMini: 'T-Spin Mini',
+      tspinMiniClear: 'T-Spin Mini',
+      tspinSingle: 'T-Spin Single',
+      tspinDouble: 'T-Spin Double',
+      tspinTriple: 'T-Spin Triple',
+      b2b: 'B2B',
       comboN: 'Kombo x{n}',
       hitFx: 'RAMT +{n}',
       flashyFx: 'FX',
@@ -245,7 +276,16 @@
       waitReady: ' · venter på klar',
       startingSoon: ' · starter…',
       go: 'KÆMP!',
-      ctrlHint: 'WASD / piletaster + mellemrum · C gem · V relikvie · sidste overlevende vinder',
+      ctrlHint: 'WASD / piletaster · Z/X drej · mellemrum hårdt · C gem · V relikvie',
+      settings: 'Indstillinger',
+      settingsTitle: 'Styring',
+      dasLabel: 'DAS (ms)',
+      arrLabel: 'ARR (ms)',
+      softLabel: 'Blødt fald (ms)',
+      settingsHint: 'Lavere DAS/ARR = hurtigere bevægelse. Blødt fald gentages mens tasten holdes.',
+      settingsSaved: 'Gemt',
+      rotCcw: '↺',
+      rotCw: '↻',
       rematchStart: 'Starter…',
       rematchWait: 'Venter på de andre ({ready}/{n})…',
       rematchPartial: '{ready}/{n} klar',
@@ -473,10 +513,50 @@
   let postHbTimer = 0;
   let postLastSeen = new Map(); // peerId -> performance.now()
 
-  function rotate(m) {
+  function rotateCW(m) {
     const n = m.length, out = Array.from({length:n}, () => Array(n).fill(0));
     for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) out[c][n - 1 - r] = m[r][c];
     return out;
+  }
+
+  function rotateCCW(m) {
+    const n = m.length, out = Array.from({length:n}, () => Array(n).fill(0));
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) out[n - 1 - c][r] = m[r][c];
+    return out;
+  }
+
+  // SRS wall kicks — offsets are (dx, dy) with +Y downward (screen space).
+  // Converted from Guideline tables where +Y is up.
+  const KICKS_JLSTZ = {
+    '0>1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    '1>0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    '1>2': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    '2>1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    '2>3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+    '3>2': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    '3>0': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    '0>3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+  };
+  const KICKS_I = {
+    '0>1': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
+    '1>0': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
+    '1>2': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
+    '2>1': [[0, 0], [1, 0], [-2, 0], [1, 2], [-2, -1]],
+    '2>3': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
+    '3>2': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
+    '3>0': [[0, 0], [1, 0], [-2, 0], [1, 2], [-2, -1]],
+    '0>3': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
+  };
+  const KICKS_O = {
+    '0>1': [[0, 0]], '1>0': [[0, 0]], '1>2': [[0, 0]], '2>1': [[0, 0]],
+    '2>3': [[0, 0]], '3>2': [[0, 0]], '3>0': [[0, 0]], '0>3': [[0, 0]],
+  };
+
+  function srsKicks(type, from, to) {
+    const key = from + '>' + to;
+    if (type === 'I') return KICKS_I[key] || [[0, 0]];
+    if (type === 'O') return KICKS_O[key] || [[0, 0]];
+    return KICKS_JLSTZ[key] || [[0, 0]];
   }
 
   function bagPiece(bag) {
@@ -488,6 +568,46 @@
       }
     }
     return bag.pop();
+  }
+
+  function clampInt(v, lo, hi, fallback) {
+    const n = parseInt(v, 10);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(lo, Math.min(hi, n));
+  }
+
+  function loadTimingPrefs() {
+    return {
+      das: clampInt(storageGet(DAS_KEY), 50, 400, DEFAULT_DAS_MS),
+      arr: clampInt(storageGet(ARR_KEY), 0, 200, DEFAULT_ARR_MS),
+      soft: clampInt(storageGet(SOFT_KEY), 10, 200, DEFAULT_SOFT_MS),
+    };
+  }
+
+  let timingPrefs = loadTimingPrefs();
+  let DAS_MS = timingPrefs.das;
+  let ARR_MS = timingPrefs.arr;
+  let SOFT_MS = timingPrefs.soft;
+
+  function applyTimingPrefs(das, arr, soft) {
+    DAS_MS = clampInt(das, 50, 400, DEFAULT_DAS_MS);
+    ARR_MS = clampInt(arr, 0, 200, DEFAULT_ARR_MS);
+    SOFT_MS = clampInt(soft, 10, 200, DEFAULT_SOFT_MS);
+    storageSet(DAS_KEY, String(DAS_MS));
+    storageSet(ARR_KEY, String(ARR_MS));
+    storageSet(SOFT_KEY, String(SOFT_MS));
+  }
+
+  // Guideline line-clear base scores (before level / B2B / combo).
+  function clearScore(cleared, tSpin) {
+    // tSpin: 0 none, 1 mini, 2 full
+    if (tSpin === 2) {
+      return [400, 800, 1200, 1600][cleared] || 0;
+    }
+    if (tSpin === 1) {
+      return [100, 200, 400, 800][cleared] || 0;
+    }
+    return [0, 100, 300, 500, 800][cleared] || 0;
   }
 
   function hexToRgb(hex) {
@@ -554,11 +674,10 @@
     }
   }
 
-  function drawMini(ctx, type, size) {
-    ctx.clearRect(0, 0, size, size);
+  function drawMiniAt(ctx, type, size, ox0, oy0) {
     if (!type) return;
     const m = SHAPES[type].m, n = m.length, bs = Math.max(8, (size / n) | 0) - 2;
-    const ox = (size - n * (bs + 2)) / 2, oy = (size - n * (bs + 2)) / 2;
+    const ox = ox0 + (size - n * (bs + 2)) / 2, oy = oy0 + (size - n * (bs + 2)) / 2;
     for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
       if (!m[r][c]) continue;
       const px = ox + c * (bs + 2), py = oy + r * (bs + 2);
@@ -580,6 +699,25 @@
     }
   }
 
+  function drawMini(ctx, type, size) {
+    ctx.clearRect(0, 0, size, size);
+    drawMiniAt(ctx, type, size, 0, 0);
+  }
+
+  function drawNextQueue(ctx, queue, size) {
+    const h = size * Math.max(1, NEXT_COUNT);
+    ctx.clearRect(0, 0, size, h);
+    if (!queue || !queue.length) return;
+    for (let i = 0; i < queue.length && i < NEXT_COUNT; i++) {
+      const slot = size;
+      // Slight fade for deeper queue slots
+      const prev = ctx.globalAlpha;
+      ctx.globalAlpha = prev * (i === 0 ? 1 : Math.max(0.45, 1 - i * 0.22));
+      drawMiniAt(ctx, queue[i], slot, 0, i * slot);
+      ctx.globalAlpha = prev;
+    }
+  }
+
   class Board {
     constructor({canvas, nextCanvas, holdCanvas, els, live, block, playerId, nextSize}) {
       this.ctx = canvas.getContext('2d');
@@ -596,7 +734,8 @@
     reset() {
       this.grid = Array.from({length: ROWS}, () => Array(COLS).fill(null));
       this.bag = [];
-      this.next = bagPiece(this.bag);
+      this.queue = [];
+      this.fillQueue();
       this.holdType = null;
       this.canHold = true;
       this.powerUp = null;
@@ -609,9 +748,13 @@
       this.elapsed = 0;
       this.acc = 0;
       this.lockAcc = 0;
+      this.lockResets = 0;
       this.over = false;
       this.gQueue = 0;
       this.combo = 0;
+      this.b2b = false;
+      this.lastAction = null; // 'move' | 'rotate' | 'drop'
+      this.lastKick = 0;
       this.flashUntil = 0;
       this.flashKind = null;
       this.spawn();
@@ -619,15 +762,34 @@
       if (this.els.over) this.els.over.textContent = '';
     }
 
-    spawn() {
-      const type = this.next;
-      this.next = bagPiece(this.bag);
+    fillQueue() {
+      while (this.queue.length < NEXT_COUNT) this.queue.push(bagPiece(this.bag));
+    }
+
+    makePiece(type) {
       const shape = SHAPES[type];
       const m = shape.m.map(r => r.slice());
-      this.piece = {type, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: -BUFFER_ROWS};
+      return {
+        type,
+        m,
+        color: shape.color,
+        x: ((COLS - m.length) / 2) | 0,
+        y: -BUFFER_ROWS,
+        r: 0,
+      };
+    }
+
+    spawn() {
+      this.fillQueue();
+      const type = this.queue.shift();
+      this.fillQueue();
+      this.piece = this.makePiece(type);
       this.canHold = true;
       this.acc = 0;
       this.lockAcc = 0;
+      this.lockResets = 0;
+      this.lastAction = null;
+      this.lastKick = 0;
       if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
         this.over = true;
         if (this.els.over) this.els.over.textContent = t('topOut');
@@ -643,6 +805,18 @@
       return Math.max(MIN_LOCK_MS, Math.min(MAX_LOCK_MS, Math.round(this.dropMs * LOCK_DELAY_RATIO)));
     }
 
+    /** Reset lock timer on successful fidget (Infinity-style, capped). */
+    tryLockReset() {
+      if (!this.grounded()) {
+        this.lockAcc = 0;
+        return;
+      }
+      if (this.lockResets < LOCK_RESET_LIMIT) {
+        this.lockAcc = 0;
+        this.lockResets++;
+      }
+    }
+
     hits(m, px, py) {
       for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) {
         if (!m[r][c]) continue;
@@ -651,6 +825,28 @@
         if (y >= 0 && this.grid[y][x]) return true;
       }
       return false;
+    }
+
+    cellFilled(x, y) {
+      if (x < 0 || x >= COLS || y >= ROWS) return true;
+      if (y < 0) return false;
+      return !!this.grid[y][x];
+    }
+
+    /** 0 none, 1 mini, 2 full — Guideline 3-corner + kick-based mini. */
+    detectTSpin() {
+      if (!this.piece || this.piece.type !== 'T' || this.lastAction !== 'rotate') return 0;
+      const {x, y} = this.piece;
+      const corners = [
+        this.cellFilled(x, y),
+        this.cellFilled(x + 2, y),
+        this.cellFilled(x, y + 2),
+        this.cellFilled(x + 2, y + 2),
+      ];
+      const filled = corners.filter(Boolean).length;
+      if (filled >= 3) return 2;
+      if (filled === 2 && this.lastKick > 0) return 1;
+      return 0;
     }
 
     canPlay() {
@@ -666,11 +862,12 @@
       } else {
         const swap = this.holdType;
         this.holdType = curType;
-        const shape = SHAPES[swap];
-        const m = shape.m.map(r => r.slice());
-        this.piece = {type: swap, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: -BUFFER_ROWS};
+        this.piece = this.makePiece(swap);
         this.acc = 0;
         this.lockAcc = 0;
+        this.lockResets = 0;
+        this.lastAction = null;
+        this.lastKick = 0;
         if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
           this.over = true;
           if (this.els.over) this.els.over.textContent = t('topOut');
@@ -731,17 +928,31 @@
       if (!this.canPlay()) return;
       if (!this.hits(this.piece.m, this.piece.x + dx, this.piece.y)) {
         this.piece.x += dx;
+        this.lastAction = 'move';
+        this.tryLockReset();
         syncState(this);
       }
     }
 
-    rot() {
-      if (!this.canPlay()) return;
-      const rm = rotate(this.piece.m);
-      for (const k of [0, -1, 1, -2, 2]) {
-        if (!this.hits(rm, this.piece.x + k, this.piece.y)) {
+    rot(dir) {
+      if (!this.canPlay() || !this.piece) return;
+      const cw = dir !== -1;
+      const from = this.piece.r & 3;
+      const to = (from + (cw ? 1 : 3)) & 3;
+      const rm = cw ? rotateCW(this.piece.m) : rotateCCW(this.piece.m);
+      const kicks = srsKicks(this.piece.type, from, to);
+      for (let i = 0; i < kicks.length; i++) {
+        const [kx, ky] = kicks[i];
+        const nx = this.piece.x + kx;
+        const ny = this.piece.y + ky;
+        if (!this.hits(rm, nx, ny)) {
           this.piece.m = rm;
-          this.piece.x += k;
+          this.piece.x = nx;
+          this.piece.y = ny;
+          this.piece.r = to;
+          this.lastAction = 'rotate';
+          this.lastKick = i;
+          this.tryLockReset();
           syncState(this);
           return;
         }
@@ -755,6 +966,7 @@
         this.score += 1;
         this.acc = 0;
         this.lockAcc = 0;
+        this.lastAction = 'drop';
         this.paintHud();
         syncState(this);
       }
@@ -770,11 +982,13 @@
       }
       this.score += d * 2;
       this.lockAcc = 0;
+      this.lastAction = 'drop';
       this.lock();
     }
 
     lock() {
       const {m, x, y, type} = this.piece;
+      const tSpin = this.detectTSpin();
       let placed = 0;
       for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) {
         if (!m[r][c]) continue;
@@ -796,11 +1010,17 @@
       this.flashUntil = performance.now() + 120;
       this.flashKind = 'lock';
       const cleared = this.clearLines();
-      if (cleared) {
+      if (cleared > 0) {
+        let base = clearScore(cleared, tSpin);
+        // Difficult clears: Tetris or any T-spin with lines (eligible for B2B)
+        const difficult = cleared === 4 || tSpin > 0;
+        const b2bAwarded = difficult && this.b2b;
+        if (b2bAwarded) base = (base * 1.5) | 0;
+        if (this.combo > 0) this.score += 50 * this.combo * this.level;
         this.combo++;
-        const base = [0, 100, 300, 500, 800][cleared] || 800;
         this.score += base * this.level;
         this.lines += cleared;
+        this.b2b = difficult;
         this.updateSpeed();
         if (navigator.vibrate) navigator.vibrate(30);
         const g = GARBAGE[cleared] || 0;
@@ -808,9 +1028,14 @@
         if (powerUpsEnabled) maybeGrantPowerUp(this, cleared);
         this.flashUntil = performance.now() + 200;
         this.flashKind = 'clear';
-        showClearFx(this, cleared);
+        showClearFx(this, cleared, tSpin, b2bAwarded);
       } else {
+        if (tSpin) {
+          this.score += clearScore(0, tSpin) * this.level;
+          showClearFx(this, 0, tSpin, false);
+        }
         this.combo = 0;
+        // Non-clearing locks (incl. T-spin 0) do not break Back-to-Back
       }
       if (this.gQueue) {
         this.applyGarbage(this.gQueue);
@@ -871,6 +1096,7 @@
         if (!this.grounded()) {
           this.piece.y++;
           this.lockAcc = 0;
+          this.lastAction = 'drop';
           syncState(this);
         }
       }
@@ -910,7 +1136,7 @@
       if (this.els.score) this.els.score.textContent = this.score;
       if (this.els.level) this.els.level.textContent = this.level;
       if (this.els.lines) this.els.lines.textContent = this.lines;
-      drawMini(this.nextCtx, this.next, this.nextSize);
+      if (this.nextCtx) drawNextQueue(this.nextCtx, this.queue, this.nextSize);
       if (this.holdCtx) drawMini(this.holdCtx, this.holdType, this.nextSize);
       if (this.els.powerWrap) this.els.powerWrap.hidden = !powerUpsEnabled;
       if (this.els.powerSlot) {
@@ -935,7 +1161,7 @@
       main.height = ROWS * block;
       const next = this.nextCtx.canvas;
       next.width = nextSize;
-      next.height = nextSize;
+      next.height = nextSize * NEXT_COUNT;
       if (this.holdCtx) {
         const hold = this.holdCtx.canvas;
         hold.width = nextSize;
@@ -1014,8 +1240,12 @@
         t: 'state',
         from: this.playerId,
         grid: this.grid,
-        piece: this.piece && {m: this.piece.m, x: this.piece.x, y: this.piece.y, color: this.piece.color, type: this.piece.type},
-        next: this.next,
+        piece: this.piece && {
+          m: this.piece.m, x: this.piece.x, y: this.piece.y,
+          color: this.piece.color, type: this.piece.type, r: this.piece.r,
+        },
+        next: this.queue[0] || null,
+        queue: this.queue.slice(),
         hold: this.holdType,
         powerUp: this.powerUp,
         shieldLeft: this.shieldLeft,
@@ -1024,6 +1254,7 @@
         level: this.level,
         lines: this.lines,
         combo: this.combo,
+        b2b: this.b2b,
         over: this.over,
       };
     }
@@ -1032,7 +1263,8 @@
       const prevLines = this.lines;
       this.grid = data.grid;
       this.piece = data.piece;
-      this.next = data.next;
+      if (Array.isArray(data.queue) && data.queue.length) this.queue = data.queue.slice();
+      else if (data.next) this.queue = [data.next];
       if ('hold' in data) this.holdType = data.hold;
       if ('powerUp' in data) this.powerUp = data.powerUp;
       if ('shieldLeft' in data) this.shieldLeft = data.shieldLeft | 0;
@@ -1041,11 +1273,12 @@
       this.level = data.level;
       this.lines = data.lines;
       if ('combo' in data) this.combo = data.combo;
+      if ('b2b' in data) this.b2b = !!data.b2b;
       this.over = !!data.over;
       this.paintHud();
       if (this.els.over) this.els.over.textContent = this.over ? t('topOut') : '';
       const gained = this.lines - prevLines;
-      if (gained > 0) showClearFx(this, Math.min(4, gained));
+      if (gained > 0) showClearFx(this, Math.min(4, gained), 0);
     }
   }
 
@@ -1248,7 +1481,7 @@
     const next = document.createElement('canvas');
     next.className = 'next';
     next.width = nw;
-    next.height = nw;
+    next.height = nw * NEXT_COUNT;
     const score = document.createElement('div');
     score.className = 'score';
     score.textContent = '0';
@@ -1361,6 +1594,7 @@
     clearCountdown();
     hide(menu);
     hide(netPanel);
+    if ($('settings')) hide($('settings'));
     hide(gameEl);
     hide(banner);
     setPlayLayout(false);
@@ -1413,9 +1647,27 @@
     hide(lobbyEl);
     hide(banner);
     hide(btnAgain);
+    const settingsEl = $('settings');
+    if (settingsEl) hide(settingsEl);
     btnAgain.disabled = false;
     btnAgain.textContent = t('playAgain');
     show(menu);
+  }
+
+  function syncSettingsUI() {
+    const rngDas = $('rngDas'), rngArr = $('rngArr'), rngSoft = $('rngSoft');
+    const outDas = $('outDas'), outArr = $('outArr'), outSoft = $('outSoft');
+    if (rngDas) { rngDas.value = String(DAS_MS); if (outDas) outDas.textContent = String(DAS_MS); }
+    if (rngArr) { rngArr.value = String(ARR_MS); if (outArr) outArr.textContent = String(ARR_MS); }
+    if (rngSoft) { rngSoft.value = String(SOFT_MS); if (outSoft) outSoft.textContent = String(SOFT_MS); }
+  }
+
+  function showSettings() {
+    hide(menu);
+    hide(netPanel);
+    hide(lobbyEl);
+    syncSettingsUI();
+    show($('settings'));
   }
 
   /* ---------- match lifecycle ---------- */
@@ -2395,13 +2647,24 @@
     window.visualViewport.addEventListener('resize', schedulePlayLayout);
   }
 
-  function showClearFx(board, cleared) {
+  function showClearFx(board, cleared, tSpin, b2bAwarded) {
     if (!flashyEnabled) return;
-    const keys = ['', 'clearSingle', 'clearDouble', 'clearTriple', 'clearTetris'];
-    const key = keys[cleared];
-    if (key) {
-      const kind = cleared >= 4 ? 'tetris' : (cleared >= 3 ? 'triple' : '');
-      showBoardToast(board, t(key), kind);
+    let label = '';
+    let kind = '';
+    if (tSpin === 2) {
+      label = cleared >= 3 ? t('tspinTriple') : cleared === 2 ? t('tspinDouble') : cleared === 1 ? t('tspinSingle') : t('tspin');
+      kind = 'tetris';
+    } else if (tSpin === 1) {
+      label = cleared ? t('tspinMiniClear') : t('tspinMini');
+      kind = 'triple';
+    } else {
+      const keys = ['', 'clearSingle', 'clearDouble', 'clearTriple', 'clearTetris'];
+      label = keys[cleared] ? t(keys[cleared]) : '';
+      kind = cleared >= 4 ? 'tetris' : (cleared >= 3 ? 'triple' : '');
+    }
+    if (label) {
+      if (b2bAwarded) showBoardToast(board, t('b2b') + ' ' + label, kind || 'tetris');
+      else showBoardToast(board, label, kind);
     }
     if (board.combo >= 2) {
       window.setTimeout(() => {
@@ -2961,6 +3224,7 @@
     setPlayerName(menuName.value || getPlayerName());
     hide(menu);
     hide(lobbyEl);
+    if ($('settings')) hide($('settings'));
     if (kind === 'host') {
       hide(netPanel);
       hostRoom(0);
@@ -2973,9 +3237,6 @@
   }
 
   /* ---------- input (DAS/ARR — no OS key-repeat lag) ---------- */
-  const DAS_MS = 160;
-  const ARR_MS = 50;
-  const SOFT_MS = 40;
   const held = { left: false, right: false, soft: false };
   let shiftDir = 0; // -1 left, 1 right, 0 none
   let shiftDas = true;
@@ -3029,6 +3290,9 @@
           shiftAcc = 0;
           act(shiftDir < 0 ? 'left' : 'right');
         }
+      } else if (ARR_MS <= 0) {
+        shiftAcc = 0;
+        act(shiftDir < 0 ? 'left' : 'right');
       } else {
         while (shiftAcc >= ARR_MS) {
           shiftAcc -= ARR_MS;
@@ -3051,7 +3315,8 @@
     if (!b) return;
     if (action === 'left') b.move(-1);
     else if (action === 'right') b.move(1);
-    else if (action === 'rot') b.rot();
+    else if (action === 'rot' || action === 'rotCw') b.rot(1);
+    else if (action === 'rotCcw') b.rot(-1);
     else if (action === 'soft') b.soft();
     else if (action === 'hard') b.hard();
     else if (action === 'hold') b.hold();
@@ -3084,9 +3349,15 @@
       e.preventDefault();
       return;
     }
-    if (k === 'w' || k === 'W' || k === 'ArrowUp') {
+    if (k === 'w' || k === 'W' || k === 'ArrowUp' || k === 'x' || k === 'X') {
       if (e.repeat) { e.preventDefault(); return; }
-      act('rot');
+      act('rotCw');
+      e.preventDefault();
+      return;
+    }
+    if (k === 'z' || k === 'Z') {
+      if (e.repeat) { e.preventDefault(); return; }
+      act('rotCcw');
       e.preventDefault();
       return;
     }
@@ -3150,6 +3421,25 @@
   /* ---------- wiring ---------- */
   $('btnHost').onclick = () => openNetUI('host');
   $('btnJoin').onclick = () => openNetUI('guest');
+  if ($('btnSettings')) $('btnSettings').onclick = showSettings;
+  if ($('btnSettingsBack')) $('btnSettingsBack').onclick = showMenu;
+  [['rngDas', 'outDas'], ['rngArr', 'outArr'], ['rngSoft', 'outSoft']].forEach(([rngId, outId]) => {
+    const rng = $(rngId), out = $(outId);
+    if (!rng) return;
+    const commit = () => {
+      applyTimingPrefs(
+        ($('rngDas') && $('rngDas').value) || DAS_MS,
+        ($('rngArr') && $('rngArr').value) || ARR_MS,
+        ($('rngSoft') && $('rngSoft').value) || SOFT_MS
+      );
+      syncSettingsUI();
+    };
+    rng.addEventListener('input', () => {
+      if (out) out.textContent = rng.value;
+    });
+    rng.addEventListener('change', commit);
+  });
+  syncSettingsUI();
   $('btnNetBack').onclick = showMenu;
   $('btnLobbyLeave').onclick = showMenu;
   $('btnNetGo').onclick = joinRoom;

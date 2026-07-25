@@ -35,7 +35,30 @@
     <input id="menuName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" data-i18n-aria="yourName" placeholder="Name" aria-label="Your name">
     <button id="btnHost" data-i18n="hostGame">Host game</button>
     <button id="btnJoin" class="secondary" data-i18n="joinGame">Join game</button>
+    <button id="btnSettings" class="secondary" type="button" data-i18n="settings">Settings</button>
     <p class="hint" data-i18n="menuHint">Up to 8 players.</p>
+  </div>
+
+  <div id="settings" class="panel stone-tablet" hidden>
+    <span class="panel-corners" aria-hidden="true"></span>
+    <h2 class="settings-title" data-i18n="settingsTitle">Controls</h2>
+    <label class="setting-slider">
+      <span data-i18n="dasLabel">DAS (ms)</span>
+      <input id="rngDas" type="range" min="50" max="400" step="10" value="160">
+      <output id="outDas" for="rngDas">160</output>
+    </label>
+    <label class="setting-slider">
+      <span data-i18n="arrLabel">ARR (ms)</span>
+      <input id="rngArr" type="range" min="0" max="200" step="5" value="50">
+      <output id="outArr" for="rngArr">50</output>
+    </label>
+    <label class="setting-slider">
+      <span data-i18n="softLabel">Soft drop (ms)</span>
+      <input id="rngSoft" type="range" min="10" max="200" step="5" value="40">
+      <output id="outSoft" for="rngSoft">40</output>
+    </label>
+    <p class="hint" data-i18n="settingsHint">Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.</p>
+    <button id="btnSettingsBack" class="secondary" type="button" data-i18n="back">Back</button>
   </div>
 
   <div id="netPanel" class="panel stone-tablet" hidden>
@@ -104,9 +127,10 @@
         <span class="pad-tag" id="padTag0">You</span>
         <div class="pad-grid">
           <button type="button" data-act="left">◀</button>
-          <button type="button" data-act="rot">↻</button>
+          <button type="button" data-act="rotCcw" data-i18n="rotCcw">↺</button>
           <button type="button" data-act="right">▶</button>
           <button type="button" data-act="soft">▼</button>
+          <button type="button" data-act="rotCw" data-i18n="rotCw">↻</button>
           <button type="button" data-act="hard">⬇</button>
           <button type="button" data-act="hold" data-i18n="hold">Keep</button>
           <button type="button" data-act="power" data-i18n="useRelic">Use</button>
