@@ -82,10 +82,10 @@
   const LANG_KEY = 'vibetrisimo-lang';
   const FLASHY_KEY = 'vibetrisimo-flashy';
   const SHAKE_KEY = 'vibetrisimo-shake';
-  const CLEAR_FLASH_MS = 160;
-  const CLEAR_COLLAPSE_MS = 200;
-  const PIECE_LERP_MS = 42;
-  const LOCK_PULSE_MS = 140;
+  const CLEAR_FLASH_MS = 220;
+  const CLEAR_COLLAPSE_MS = 280;
+  const PIECE_LERP_MS = 85; // higher = smoother / more visible glide
+  const LOCK_PULSE_MS = 180;
   // Level bands deepen the dungeon palette (torch → ember → molten).
   const LEVEL_THEMES = [
     { tint: 'rgba(18,14,28,.08)', ember: 'rgba(120,70,30,.00)', warm: 'rgba(212,160,60,.18)', cool: 'rgba(70,40,90,.14)', glow: 'rgba(212,175,55,.14)' },
@@ -377,13 +377,15 @@
     if (chk) chk.checked = shakeEnabled;
   }
 
+  // FX checkbox is the source of truth. prefers-reduced-motion only affects the
+  // default via detectFlashy() — an explicit FX-on must not be silently ignored.
   function fxMotionOk() {
-    return flashyEnabled && !(typeof reduceMotion === 'function' && reduceMotion());
+    return !!flashyEnabled;
   }
 
   /* ---------- stage FX: shake / hit-stop / level theme ---------- */
   let hitStopLeft = 0;
-  let shakeState = { mag: 0, until: 0, dur: 220 };
+  let shakeState = { mag: 0, until: 0, dur: 280 };
   let stageParallax = { x: 0, y: 0 };
 
   function triggerHitStop(ms) {
@@ -393,10 +395,11 @@
 
   function triggerShake(intensity) {
     if (!shakeEnabled || !fxMotionOk()) return;
-    const mag = Math.max(0, intensity);
-    if (mag >= shakeState.mag || performance.now() > shakeState.until) {
-      shakeState.mag = mag;
-      shakeState.dur = 180 + mag * 12;
+    // Scale up so clears/drops read on a large desktop canvas
+    const mag = Math.max(0, intensity) * 1.8;
+    if (mag >= shakeState.mag * 0.6 || performance.now() > shakeState.until) {
+      shakeState.mag = Math.max(shakeState.mag * 0.35, mag);
+      shakeState.dur = 220 + mag * 18;
       shakeState.until = performance.now() + shakeState.dur;
     }
   }
@@ -429,14 +432,18 @@
 
     let tx = 0, ty = 0;
     if (shakeEnabled && shakeState.until > now) {
-      const p = (shakeState.until - now) / shakeState.dur;
-      const m = shakeState.mag * p * p;
+      const p = Math.max(0, (shakeState.until - now) / shakeState.dur);
+      // Linear-ish decay (was p² — died too fast to notice)
+      const m = shakeState.mag * (0.35 + 0.65 * p);
       tx = (Math.random() - 0.5) * 2 * m;
       ty = (Math.random() - 0.5) * 2 * m;
     }
     stage.style.backgroundPosition =
       'center, center, calc(50% + ' + stageParallax.x.toFixed(2) + 'px) calc(48% + ' + stageParallax.y.toFixed(2) + 'px)';
     stage.style.transform = 'translate3d(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px,0)';
+    // Also nudge the local board so shake reads even if stage art dominates
+    const host = stage.querySelector('.player.board-host');
+    if (host) host.style.transform = (tx || ty) ? 'translate3d(' + (tx * 0.6).toFixed(2) + 'px,' + (ty * 0.6).toFixed(2) + 'px,0)' : '';
   }
 
   function t(key, vars) {
@@ -933,17 +940,21 @@
 
     syncVis(snap) {
       if (!this.piece) return;
+      const now = performance.now();
+      const dt = Math.min(48, now - (this._visLast || now));
+      this._visLast = now;
       if (snap || this.visSnap) {
         this.visX = this.piece.x;
         this.visY = this.piece.y;
         this.visSnap = false;
         return;
       }
-      const k = Math.min(1, 16 / PIECE_LERP_MS);
+      // Frame-rate independent easing — readable on 60Hz and 144Hz
+      const k = 1 - Math.exp(-dt / PIECE_LERP_MS);
       this.visX += (this.piece.x - this.visX) * k;
       this.visY += (this.piece.y - this.visY) * k;
-      if (Math.abs(this.visX - this.piece.x) < 0.02) this.visX = this.piece.x;
-      if (Math.abs(this.visY - this.piece.y) < 0.02) this.visY = this.piece.y;
+      if (Math.abs(this.visX - this.piece.x) < 0.015) this.visX = this.piece.x;
+      if (Math.abs(this.visY - this.piece.y) < 0.015) this.visY = this.piece.y;
     }
 
     grounded() {
@@ -1271,10 +1282,11 @@
         this.flashKind = 'clear';
         showClearFx(this, cleared, tSpin, b2bAwarded);
         // Impact scaling: singles soft, Tetris / T-spin heavy
-        const impact = tSpin ? 7 + cleared : (cleared >= 4 ? 8 : cleared >= 3 ? 5 : cleared >= 2 ? 3 : 1.5);
+        const impact = tSpin ? 10 + cleared * 2 : (cleared >= 4 ? 14 : cleared >= 3 ? 9 : cleared >= 2 ? 6 : 3.5);
         triggerShake(impact);
-        if (cleared >= 4 || tSpin >= 2) triggerHitStop(cleared >= 4 || tSpin >= 2 ? 70 : 45);
-        else if (cleared >= 3) triggerHitStop(35);
+        if (cleared >= 4 || tSpin >= 2) triggerHitStop(90);
+        else if (cleared >= 3 || tSpin === 1) triggerHitStop(55);
+        else if (cleared >= 2) triggerHitStop(30);
         pendingGarbage = this.gQueue;
         this.gQueue = 0;
         this.beginClearAnim(fullRows, pendingGarbage);
@@ -1461,11 +1473,11 @@
           const settlePulse = settling && settling.has(c + ',' + r) ? this.lockPulse : 0;
           if (isDying && flashP > 0) {
             const prev = ctx.globalAlpha;
-            ctx.globalAlpha = prev * (0.35 + flashP * 0.65);
+            ctx.globalAlpha = prev * (0.45 + flashP * 0.55);
             drawBlock(ctx, c, r + yOff, this.grid[r][c], s, {pulse: flashP});
             ctx.globalAlpha = prev;
-            // Brass flash overlay on clearing rows
-            ctx.fillStyle = 'rgba(240,220,160,' + (flashP * 0.55) + ')';
+            // Bright brass flash on clearing rows (hard to miss)
+            ctx.fillStyle = 'rgba(255,236,170,' + (0.35 + flashP * 0.55) + ')';
             ctx.fillRect(c * s, (r + yOff) * s, s, s);
           } else if (isDying) {
             const collapseP = Math.min(1, Math.max(0, (anim.t - anim.flashMs) / anim.collapseMs));
@@ -2755,19 +2767,19 @@
 
   function burstDust(x, y, count, color) {
     spawnBurst(x, y, count, () => {
-      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
-      const spd = 0.6 + Math.random() * 2.8;
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.6;
+      const spd = 1.2 + Math.random() * 4.5;
       return {
         kind: 'dust',
-        x: x + (Math.random() - 0.5) * 10,
-        y: y + (Math.random() - 0.5) * 6,
+        x: x + (Math.random() - 0.5) * 14,
+        y: y + (Math.random() - 0.5) * 8,
         vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd * 0.4,
-        g: 0.08,
-        life: 0.25 + Math.random() * 0.35,
+        vy: Math.sin(ang) * spd * 0.55 - Math.random() * 1.5,
+        g: 0.14,
+        life: 0.45 + Math.random() * 0.55,
         max: 0,
-        size: 1 + Math.random() * 2.2,
-        color: color || 'rgba(200,180,140,.7)',
+        size: 2.2 + Math.random() * 3.8,
+        color: color || '#d4c4a0',
       };
     });
   }
@@ -2784,16 +2796,22 @@
     const color = (SHAPES[type] && SHAPES[type].color) || '#c9a227';
     cells.forEach(cell => {
       const p = boardCellScreen(board, cell.x, cell.y);
-      burstDust(p.x, p.y, Math.min(8, 3 + (dist / 4) | 0), color);
+      burstDust(p.x, p.y, Math.min(14, 6 + (dist / 3) | 0), color);
     });
-    if (dist >= 8) triggerShake(2.5);
+    // Impact thud — always, stronger for long drops
+    triggerShake(dist >= 12 ? 5 : dist >= 6 ? 3.5 : 2.2);
+    burstEmbers(
+      cells.length ? boardCellScreen(board, cells[0].x, cells[0].y).x : boardOrigin(board).x,
+      cells.length ? boardCellScreen(board, cells[0].x, cells[0].y).y : boardOrigin(board).y,
+      Math.min(16, 4 + (dist / 2) | 0)
+    );
   }
 
   function fxForLock(board, cells) {
     if (!fxMotionOk() || !fxCtx || !cells || !cells.length) return;
     cells.forEach(cell => {
       const p = boardCellScreen(board, cell.x, cell.y);
-      burstDust(p.x, p.y, 2, 'rgba(220,200,150,.55)');
+      burstDust(p.x, p.y, 4, '#e8d9b5');
     });
   }
 
@@ -2904,22 +2922,23 @@
   function fxForClear(board, cleared, tSpin) {
     if (!flashyEnabled || !fxCtx) return;
     const o = boardOrigin(board);
-    // Line shower — more particles for bigger clears
-    const shower = cleared >= 4 ? 56 : cleared >= 3 ? 36 : cleared >= 2 ? 22 : 12;
-    for (let i = 0; i < shower; i++) {
-      const x = o.x + (Math.random() - 0.5) * 120;
-      const y = o.y + (Math.random() - 0.5) * 40;
-      burstDust(x, y, 1, Math.random() > 0.5 ? '#d4af37' : '#e8d9b5');
-    }
+    // Line shower — dense enough to read on a full-bleed stage
+    const shower = cleared >= 4 ? 90 : cleared >= 3 ? 60 : cleared >= 2 ? 40 : 24;
+    burstDust(o.x, o.y, shower, '#d4af37');
+    burstDust(o.x, o.y + 20, (shower / 2) | 0, '#e8d9b5');
     if (cleared >= 4 || tSpin >= 2) {
-      burstConfetti(o.x, o.y, tSpin ? 90 : 70);
-      burstGlitter(o.x, o.y, 48);
-      burstEmbers(o.x, o.y, tSpin ? 28 : 18);
+      burstConfetti(o.x, o.y, tSpin ? 110 : 90);
+      burstGlitter(o.x, o.y, 64);
+      burstEmbers(o.x, o.y, tSpin ? 40 : 28);
     } else if (cleared >= 3 || tSpin === 1) {
-      burstConfetti(o.x, o.y, 36);
-      burstGlitter(o.x, o.y, 22);
+      burstConfetti(o.x, o.y, 50);
+      burstGlitter(o.x, o.y, 36);
+      burstEmbers(o.x, o.y, 14);
     } else if (cleared >= 2) {
-      burstGlitter(o.x, o.y, 18);
+      burstGlitter(o.x, o.y, 28);
+      burstConfetti(o.x, o.y, 18);
+    } else if (cleared >= 1) {
+      burstGlitter(o.x, o.y, 16);
     }
     if (board.combo >= 5) {
       burstGlitter(o.x, o.y - 10, 55);
