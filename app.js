@@ -864,7 +864,7 @@
         b.els.lines = b.els.meta.querySelector('.ln');
       }
       if (b.over && b.els && b.els.over) {
-        b.els.over.textContent = b.live && eliminated ? t('eliminated') : t('topOut');
+        setBoardOverLabel(b, b.live && eliminated ? t('eliminated') : t('topOut'));
       }
       if (typeof b.paintHud === 'function') b.paintHud();
     });
@@ -2055,7 +2055,7 @@
       if ('b2b' in data) this.b2b = !!data.b2b;
       this.over = !!data.over;
       this.paintHud();
-      if (this.els.over) this.els.over.textContent = this.over ? t('topOut') : '';
+      setBoardOverLabel(this, this.over ? t('topOut') : '');
       const gained = this.lines - prevLines;
       if (gained > 0) showClearFx(this, Math.min(4, gained), 0);
     }
@@ -2233,6 +2233,27 @@
     else showMenu();
   }
 
+  function resultsOpen() {
+    const panel = $('results');
+    return !!(panel && !panel.hidden);
+  }
+
+  function clearBoardOverLabels() {
+    boards.forEach(b => {
+      if (b.els && b.els.over) b.els.over.textContent = '';
+    });
+  }
+
+  function setBoardOverLabel(board, text) {
+    if (!board || !board.els || !board.els.over) return;
+    // Results overlay owns the end-of-match UI — keep board plaques clear under it.
+    if (resultsOpen()) {
+      board.els.over.textContent = '';
+      return;
+    }
+    board.els.over.textContent = text || '';
+  }
+
   function showResults(titleText) {
     const panel = $('results');
     const title = $('resultsTitle');
@@ -2241,10 +2262,7 @@
     hide($('pause'));
     hide(banner);
     hide(btnAgain);
-    // Clear board "ELIMINATED" / top-out labels under the results overlay
-    boards.forEach(b => {
-      if (b.els && b.els.over) b.els.over.textContent = '';
-    });
+    clearBoardOverLabels();
     if (title) title.textContent = titleText || t('results');
     const board = boards.find(b => b.live) || boardById.get(myId);
     const stats = board && board.getMatchStats ? board.getMatchStats() : null;
@@ -2733,6 +2751,7 @@
     running = false;
     ended = false;
     eliminated = false;
+    mode = null;
     matchPhase = 'idle';
     roster = [];
     clearBoards();
@@ -3138,14 +3157,15 @@
     }
     if (eliminated) return;
     eliminated = true;
-    if (board.els.over) board.els.over.textContent = mode === 'solo' ? t('topOut') : t('eliminated');
+    setBoardOverLabel(board, mode === 'solo' ? t('topOut') : t('eliminated'));
     markDead(board.playerId);
     if (mode === 'solo') {
       finishSoloRun(false);
       return;
     }
     netSend({t: 'over', from: board.playerId});
-    showBanner(t('eliminated'), 'lose');
+    // Mid-match only — end-of-match uses the results panel, not a stacked banner.
+    if (!ended) showBanner(t('eliminated'), 'lose');
     sfx('gameover');
     const a = audio();
     if (a) a.stopMusic(600);
@@ -3172,7 +3192,6 @@
     pausedById = null;
     hide($('pause'));
     const title = titleOverride || (won ? t('victory') : t('gameOver'));
-    showBanner(title, won ? 'win' : 'lose');
     if (won) {
       burstFireworks();
       sfx('win');
@@ -3191,7 +3210,7 @@
     const b = boardById.get(id);
     // Keep local "ELIMINATED" label if onTopOut already set it
     if (b && b.els.over && !(b.live && eliminated)) {
-      b.els.over.textContent = t('topOut');
+      setBoardOverLabel(b, t('topOut'));
     }
   }
 
@@ -3211,7 +3230,6 @@
       applyWin(winner.id);
     } else {
       const title = roster.length <= 1 ? t('gameOver') : t('draw');
-      showBanner(title, 'lose');
       showResults(title);
       showRematchBtn();
       startPostHeartbeat();
@@ -3241,13 +3259,11 @@
     let title;
     if (winnerId === myId) {
       title = t('victory');
-      showBanner(title, 'win');
       burstFireworks();
       sfx('win');
     } else {
       const w = roster.find(p => p.id === winnerId);
       title = t('wins', {name: w?.name || t('defaultName')});
-      showBanner(title, 'lose');
       sfx('gameover');
     }
     const a = audio();
@@ -4774,9 +4790,9 @@
       // Host ended the session intentionally — return to a clean main menu only.
       sessionLeaving = true;
       closeNet();
-      sessionLeaving = false;
       setLobbyUrl(null);
       showMenuWithStatus(t('hostEndedSession'));
+      sessionLeaving = false;
       return;
     }
     if (data.t === 'lobby') {

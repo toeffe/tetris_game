@@ -1465,6 +1465,7 @@ canvas{
   opacity:0;
   pointer-events:none;
 }
+#banner[hidden]{display:none !important;opacity:0 !important;pointer-events:none !important;}
 #banner:not([hidden]){
   animation:banner-pop .45s cubic-bezier(.2,1.2,.4,1) forwards;
   pointer-events:auto;
