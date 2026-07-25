@@ -576,6 +576,23 @@ body.in-game .subtitle{display:none;}
   font-size:.68rem !important;
   color:var(--gold) !important;
 }
+.lobby-panel{width:min(420px,100%);}
+.lobby-session{margin-bottom:8px;}
+.lobby-conn{
+  margin:6px 0 0 !important;
+  font-size:.68rem !important;
+  letter-spacing:.08em;
+}
+.lobby-settings-summary{
+  text-align:left !important;
+  margin:8px 0 !important;
+  padding:8px 10px;
+  border:1px solid rgba(212,175,55,.22);
+  background:rgba(0,0,0,.22);
+  font-size:.72rem !important;
+  line-height:1.45;
+}
+#btnStart:disabled{opacity:.45;cursor:not-allowed;}
 .mode-objective{
   font-family:var(--font-display);
   font-size:.95rem;
@@ -740,6 +757,19 @@ input#netIn:focus{
 .roster li .tag{color:#a89878;font-size:.7rem;text-transform:uppercase;}
 .roster li.ready .tag{color:var(--emerald);}
 .roster li.me{outline:1px solid rgba(212,175,55,.5);}
+.roster li .conn-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:#6d9d3c;
+  box-shadow:0 0 6px rgba(109,157,60,.55);
+  flex:0 0 auto;
+}
+.roster li.offline .conn-dot{background:#a84848;box-shadow:none;}
+.roster li .tag-host{
+  font-size:.62rem;
+  letter-spacing:.1em;
+  color:var(--gold);
+  margin-left:6px;
+}
 
 #game{
   width:100%;

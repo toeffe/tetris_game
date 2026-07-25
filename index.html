@@ -135,8 +135,8 @@
     <h2 class="settings-title" id="resultsTitle">Results</h2>
     <ul class="results-stats" id="resultsStats"></ul>
     <p id="resultsHint" class="hint rematch-hint"></p>
-    <button id="btnResultsAgain" type="button" data-i18n="playAgain">Play again</button>
-    <button id="btnResultsMenu" class="secondary" type="button" data-i18n="menu">Menu</button>
+    <button id="btnResultsAgain" type="button" data-i18n="backToLobby">Back to lobby</button>
+    <button id="btnResultsMenu" class="secondary" type="button" data-i18n="leaveSession">Leave session</button>
   </div>
 
   <div id="netPanel" class="panel stone-tablet" hidden>
@@ -150,14 +150,27 @@
     <button id="btnNetBack" class="secondary" type="button" data-i18n="back">Back</button>
   </div>
 
-  <div id="lobby" class="panel stone-tablet" hidden>
+  <div id="lobby" class="panel stone-tablet lobby-panel" hidden>
     <span class="panel-corners" aria-hidden="true"></span>
-    <div id="lobbyCode" class="room-code" data-i18n-aria="roomCode" aria-label="Room code">·····</div>
-    <button id="btnCopyLobby" type="button" data-i18n="copyCode">Copy code</button>
+    <h2 class="settings-title" data-i18n="lobbyTitle">Lobby</h2>
+    <div class="lobby-session">
+      <div id="lobbyCode" class="room-code" data-i18n-aria="roomCode" aria-label="Room code">·····</div>
+      <button id="btnCopyLobby" type="button" data-i18n="copyCode">Copy code</button>
+      <p id="lobbyConn" class="hint lobby-conn" aria-live="polite"></p>
+    </div>
     <input id="lobbyName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" data-i18n-aria="yourName" placeholder="Name" aria-label="Your name">
     <ul id="rosterList" class="roster"></ul>
     <p id="lobbyStatus" class="hint"></p>
     <p id="lobbyMode" class="hint lobby-mode" data-i18n="versusLobby">Versus battle</p>
+    <div id="lobbySettingsSummary" class="lobby-settings-summary hint" hidden></div>
+    <label id="matchModeRow" class="setting-row" hidden>
+      <span data-i18n="matchMode">Match mode</span>
+      <select id="selMatchMode">
+        <option value="versus" data-i18n="modeVersus" selected>Versus</option>
+        <option value="sprint" data-i18n="modeSprint">Sprint</option>
+        <option value="ultra" data-i18n="modeUltra">Ultra</option>
+      </select>
+    </label>
     <label id="dropSpeedRow" class="setting-row" hidden>
       <span data-i18n="dropSpeed">Drop speed</span>
       <select id="selDropSpeed">
@@ -192,14 +205,15 @@
       </select>
     </label>
     <button id="btnReady" type="button" data-i18n="ready">Ready</button>
-    <button id="btnLobbyLeave" class="secondary" type="button" data-i18n="leave">Leave</button>
+    <button id="btnStart" type="button" hidden data-i18n="startMatch">Start</button>
+    <button id="btnLobbyLeave" class="secondary" type="button" data-i18n="leaveSession">Leave session</button>
   </div>
 
   <div id="game" hidden>
     <div id="boards" class="boards"></div>
     <p class="hint" id="ctrlHint"></p>
-    <button id="btnAgain" class="secondary" type="button" hidden data-i18n="playAgain">Play again</button>
-    <button id="btnMenu" class="secondary" type="button" data-i18n="menu">Menu</button>
+    <button id="btnAgain" class="secondary" type="button" hidden data-i18n="backToLobby">Back to lobby</button>
+    <button id="btnMenu" class="secondary" type="button" data-i18n="leaveSession">Leave session</button>
 
     <div id="pads" class="pads">
       <div class="pad" data-who="0">

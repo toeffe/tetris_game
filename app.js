@@ -86,10 +86,13 @@
   const GRID_KEY = 'vibetrisimo-grid';
   const BINDS_KEY = 'vibetrisimo-binds';
   const MODE_KEY = 'vibetrisimo-mode';
+  const SESSION_HOST_KEY = 'vibetrisimo-session-host';
   const DEFAULT_GRID_OPACITY = 16;
   const SPRINT_LINES = 40;
   const ULTRA_MS = 120000;
   const SOLO_MODES = ['marathon', 'sprint', 'ultra', 'zen'];
+  const LOBBY_MATCH_MODES = ['versus', 'sprint', 'ultra'];
+  const RECONNECT_GRACE_MS = 15000;
   const CLEAR_FLASH_MS = 220;
   const CLEAR_COLLAPSE_MS = 280;
   const PIECE_LERP_MS = 85; // higher = smoother / more visible glide
@@ -178,6 +181,26 @@
       connectingHost: 'Opening room…',
       waitingPeers: 'Share the code — waiting for players',
       peerJoined: '{name} joined',
+      lobbyTitle: 'Lobby',
+      matchMode: 'Match mode',
+      modeVersus: 'Versus',
+      startMatch: 'Start',
+      leaveSession: 'Leave session',
+      backToLobby: 'Back to lobby',
+      lobbyWaitingStart: 'All ready — host can start',
+      lobbyNeedReady: 'Ready up to play',
+      lobbyHostStart: 'Start when everyone is ready',
+      settingsLive: 'Drop {speed} · Garbage {garbage} · Ramp {ramp} · Relics {relics}',
+      connGood: 'Connection: good',
+      connFair: 'Connection: fair',
+      connPoor: 'Connection: poor',
+      connChecking: 'Connection: checking…',
+      reconnectingPeer: 'Waiting for {name} ({s}s)…',
+      peerForfeit: '{name} forfeited',
+      hostEndedSession: 'Host ended the session.',
+      peerLeftLobby: '{name} left the lobby',
+      joinRetry: 'Retry',
+      offline: 'Offline',
       copyCode: 'Copy code',
       codePh: 'Code',
       join: 'Join',
@@ -345,6 +368,26 @@
       connectingHost: 'Åbner rum…',
       waitingPeers: 'Del koden — venter på spillere',
       peerJoined: '{name} tilsluttede',
+      lobbyTitle: 'Lobby',
+      matchMode: 'Kamp-tilstand',
+      modeVersus: 'Versus',
+      startMatch: 'Start',
+      leaveSession: 'Forlad session',
+      backToLobby: 'Tilbage til lobby',
+      lobbyWaitingStart: 'Alle klar — værten kan starte',
+      lobbyNeedReady: 'Tryk Klar for at spille',
+      lobbyHostStart: 'Start når alle er klar',
+      settingsLive: 'Fald {speed} · Skrald {garbage} · Ramp {ramp} · Relikvier {relics}',
+      connGood: 'Forbindelse: god',
+      connFair: 'Forbindelse: middel',
+      connPoor: 'Forbindelse: dårlig',
+      connChecking: 'Forbindelse: tjekker…',
+      reconnectingPeer: 'Venter på {name} ({s}s)…',
+      peerForfeit: '{name} opgav',
+      hostEndedSession: 'Værten afsluttede sessionen.',
+      peerLeftLobby: '{name} forlod lobbyen',
+      joinRetry: 'Prøv igen',
+      offline: 'Offline',
       copyCode: 'Kopiér kode',
       codePh: 'Kode',
       join: 'Tilslut',
@@ -827,11 +870,12 @@
   const menu = $('menu'), netPanel = $('netPanel'), lobbyEl = $('lobby'), gameEl = $('game');
   const banner = $('banner'), btnAgain = $('btnAgain'), boardsEl = $('boards');
   const countdownEl = $('countdown');
-  const rosterList = $('rosterList'), btnReady = $('btnReady');
+  const rosterList = $('rosterList'), btnReady = $('btnReady'), btnStart = $('btnStart');
   const speedRampRow = $('speedRampRow'), selSpeedRamp = $('selSpeedRamp');
   const powerUpsRow = $('powerUpsRow'), selPowerUps = $('selPowerUps');
   const dropSpeedRow = $('dropSpeedRow'), selDropSpeed = $('selDropSpeed');
   const garbageTargetRow = $('garbageTargetRow'), selGarbageTarget = $('selGarbageTarget');
+  const matchModeRow = $('matchModeRow'), selMatchMode = $('selMatchMode');
   const menuName = $('menuName'), lobbyName = $('lobbyName');
 
   function sanitizeName(raw) {
@@ -871,8 +915,12 @@
   let paused = false;
   let pausedById = null;
   let settingsFrom = 'menu'; // 'menu' | 'pause'
-  let matchPhase = 'idle'; // idle | lobby | countdown | playing | post
+  let matchPhase = 'idle'; // idle | connecting | lobby | countdown | playing | post
   let resultsAnimToken = 0;
+  let sessionLeaving = false; // intentional leave — peers should not treat as crash
+  let reconnectGraces = new Map(); // peerId -> { timer, name, until }
+  let connQualityLabel = 'checking';
+  let connQualityTimer = 0;
   let last = 0, raf = 0, logicTimer = 0, countdownTimer = 0;
   // Synced match start: host waits for guest acks, then fires `go` and delays
   // its own countdown by ~RTT/2 so gravity does not begin a hop ahead of guests.
@@ -914,7 +962,7 @@
   let powerUpsEnabled = false; // host-controlled relics / power-ups
   let myId = null;
   let hostPlayerId = null; // player id of current relay host (may differ from roomCode after migration)
-  let roster = []; // {id, name, ready, alive}
+  let roster = []; // {id, name, ready, alive, connected?}
   let connections = new Map(); // host: peerId -> DataConnection
   let syncAcc = 0;
   let suppressNetClose = false;
@@ -2153,7 +2201,8 @@
 
   function quitFromPause() {
     if (paused && matchPhase === 'playing') requestMatchPause(false);
-    showMenu();
+    if (mode === 'host' || mode === 'guest') leaveSession();
+    else showMenu();
   }
 
   function showResults(titleText) {
@@ -2519,30 +2568,48 @@
       const li = document.createElement('li');
       if (p.id === myId) li.classList.add('me');
       if (p.ready) li.classList.add('ready');
+      if (p.connected === false) li.classList.add('offline');
+      const left = document.createElement('span');
+      left.style.display = 'flex';
+      left.style.alignItems = 'center';
+      left.style.gap = '8px';
+      const dot = document.createElement('span');
+      dot.className = 'conn-dot';
+      dot.title = p.connected === false ? 'offline' : 'online';
       const name = document.createElement('span');
       name.textContent = p.name + (p.id === myId ? t('youTag') : '');
+      if (p.id === hostPlayerId || (mode === 'host' && p.id === myId)) {
+        const hostTag = document.createElement('span');
+        hostTag.className = 'tag-host';
+        hostTag.textContent = 'HOST';
+        name.appendChild(hostTag);
+      }
+      left.append(dot, name);
       const tag = document.createElement('span');
       tag.className = 'tag';
-      tag.textContent = p.ready ? t('ready') : t('waiting');
-      li.append(name, tag);
+      if (p.connected === false) tag.textContent = t('offline');
+      else tag.textContent = p.ready ? t('ready') : t('waiting');
+      li.append(left, tag);
       rosterList.appendChild(li);
     });
     const n = roster.length;
-    const readyN = roster.filter(p => p.ready).length;
+    const readyN = roster.filter(p => p.ready && p.connected !== false).length;
     let status;
     if (mode === 'host' && n === 1) {
       status = t('waitingPeers');
+    } else if (n > 0 && readyN >= n) {
+      status = mode === 'host' ? t('lobbyWaitingStart') : t('lobbyHostStart');
     } else {
       status = t('rosterStatus', {n, max: MAX_PLAYERS, ready: readyN});
-      if (n < 1) status += t('needTwo');
-      else if (readyN < n) status += t('waitReady');
-      else status += t('startingSoon');
+      if (readyN < n) status += ' · ' + t('lobbyNeedReady');
     }
-    $('lobbyStatus').textContent = status;
+    if ($('lobbyStatus')) $('lobbyStatus').textContent = status;
 
     const me = roster.find(p => p.id === myId);
     btnReady.textContent = me?.ready ? t('unready') : t('ready');
     btnReady.classList.toggle('ready-on', !!me?.ready);
+    updateStartButton();
+    updateConnQualityUI();
   }
 
   function showLobby() {
@@ -2556,15 +2623,15 @@
     gameEl.classList.remove('game-entering');
     show(lobbyEl);
     matchPhase = 'lobby';
-    playMode = 'versus';
+    if (mode === 'host' || mode === 'guest') {
+      if (!LOBBY_MATCH_MODES.includes(playMode)) playMode = 'versus';
+    }
     $('lobbyCode').textContent = roomCode || '·····';
     lobbyName.value = getPlayerName();
     const lobbyMode = $('lobbyMode');
-    if (lobbyMode) {
-      lobbyMode.hidden = false;
-      lobbyMode.textContent = t('versusLobby');
-    }
+    if (lobbyMode) lobbyMode.hidden = false;
     if (mode === 'host') {
+      show(matchModeRow);
       show(speedRampRow);
       selSpeedRamp.value = timeRampEnabled ? 'on' : 'off';
       selSpeedRamp.disabled = false;
@@ -2577,7 +2644,12 @@
       show(garbageTargetRow);
       selGarbageTarget.value = GARBAGE_TARGET[garbageTarget] ? garbageTarget : 'clockwise';
       selGarbageTarget.disabled = false;
+      if (selMatchMode) {
+        selMatchMode.value = LOBBY_MATCH_MODES.includes(playMode) ? playMode : 'versus';
+        selMatchMode.disabled = false;
+      }
     } else {
+      hide(matchModeRow);
       hide(speedRampRow);
       hide(powerUpsRow);
       hide(dropSpeedRow);
@@ -2586,14 +2658,19 @@
       selPowerUps.disabled = true;
       selDropSpeed.disabled = true;
       selGarbageTarget.disabled = true;
+      if (selMatchMode) selMatchMode.disabled = true;
     }
+    updateLobbySettingsViews();
     renderRoster();
+    startConnQualityWatch();
   }
 
   function showMenu() {
     stopLoop();
     clearCountdown();
     clearPendingStart();
+    clearAllReconnectGraces();
+    stopConnQualityWatch();
     closeNet();
     running = false;
     ended = false;
@@ -3119,12 +3196,13 @@
   }
 
   function showRematchBtn() {
-    btnAgain.textContent = t('playAgain');
+    const label = mode === 'solo' ? t('playAgain') : t('backToLobby');
+    btnAgain.textContent = label;
     btnAgain.disabled = false;
     show(btnAgain);
     const btnResultsAgain = $('btnResultsAgain');
     if (btnResultsAgain) {
-      btnResultsAgain.textContent = t('playAgain');
+      btnResultsAgain.textContent = label;
       btnResultsAgain.disabled = false;
     }
   }
@@ -3167,23 +3245,266 @@
       startSoloMatch(playMode);
       return;
     }
-    if (matchPhase !== 'post' && !ended) return;
-    const me = roster.find(p => p.id === myId);
-    if (!me || me.ready) return;
-    me.ready = true;
-    btnAgain.disabled = true;
-    btnAgain.textContent = t('ready');
-    const btnResultsAgain = $('btnResultsAgain');
-    if (btnResultsAgain) {
-      btnResultsAgain.disabled = true;
-      btnResultsAgain.textContent = t('ready');
+    // Versus: return to the same session lobby (Peer stays open).
+    returnToLobbySession();
+  }
+
+  /* ---------- persistent lobby session ---------- */
+  function getLobbyUrlCode() {
+    try {
+      const code = (new URL(location.href)).searchParams.get('lobby');
+      if (!code) return null;
+      const clean = String(code).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+      return clean.length === 5 ? clean : null;
+    } catch (_) {
+      return null;
     }
-    netSend({t: 'rematch', from: myId});
-    updateRematchHint();
+  }
+
+  function setLobbyUrl(code) {
+    try {
+      const url = new URL(location.href);
+      if (code) url.searchParams.set('lobby', String(code).toUpperCase());
+      else url.searchParams.delete('lobby');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    } catch (_) {}
+  }
+
+  function clearReconnectGrace(peerId) {
+    const g = reconnectGraces.get(peerId);
+    if (g && g.timer) clearTimeout(g.timer);
+    reconnectGraces.delete(peerId);
+  }
+
+  function clearAllReconnectGraces() {
+    reconnectGraces.forEach(g => { if (g.timer) clearTimeout(g.timer); });
+    reconnectGraces.clear();
+  }
+
+  function settingsPayload() {
+    return {
+      t: 'settings',
+      playMode,
+      speedRamp: timeRampEnabled,
+      dropSpeed,
+      garbageTarget,
+      powerUps: powerUpsEnabled,
+    };
+  }
+
+  function broadcastLobbySettings() {
+    if (mode !== 'host') return;
+    broadcast(settingsPayload());
+    updateLobbySettingsViews();
+  }
+
+  function applyLobbySettings(data) {
+    if (!data || typeof data !== 'object') return;
+    if (LOBBY_MATCH_MODES.includes(data.playMode) || data.playMode === 'versus') {
+      playMode = data.playMode;
+    }
+    if (typeof data.speedRamp === 'boolean') timeRampEnabled = data.speedRamp;
+    else if (data.speedRamp === 'on' || data.speedRamp === 'off') timeRampEnabled = data.speedRamp === 'on';
+    if (DROP_SPEED[data.dropSpeed]) dropSpeed = data.dropSpeed;
+    if (GARBAGE_TARGET[data.garbageTarget]) garbageTarget = data.garbageTarget;
+    if (typeof data.powerUps === 'boolean') powerUpsEnabled = data.powerUps;
+    updateLobbySettingsViews();
+  }
+
+  function updateLobbySettingsViews() {
+    const modeLabel = playMode === 'sprint' ? t('modeSprint')
+      : playMode === 'ultra' ? t('modeUltra')
+      : t('modeVersus');
+    if ($('lobbyMode')) $('lobbyMode').textContent = modeLabel;
+    if (selMatchMode) selMatchMode.value = LOBBY_MATCH_MODES.includes(playMode) ? playMode : 'versus';
+    if (selDropSpeed) selDropSpeed.value = DROP_SPEED[dropSpeed] ? dropSpeed : 'normal';
+    if (selGarbageTarget) selGarbageTarget.value = GARBAGE_TARGET[garbageTarget] ? garbageTarget : 'clockwise';
+    if (selSpeedRamp) selSpeedRamp.value = timeRampEnabled ? 'on' : 'off';
+    if (selPowerUps) selPowerUps.value = powerUpsEnabled ? 'on' : 'off';
+
+    const summary = $('lobbySettingsSummary');
+    if (summary) {
+      if (mode === 'guest') {
+        summary.hidden = false;
+        summary.textContent = t('settingsLive', {
+          speed: dropSpeed,
+          garbage: garbageTarget,
+          ramp: timeRampEnabled ? t('optOn') : t('optOff'),
+          relics: powerUpsEnabled ? t('optOn') : t('optOff'),
+        });
+      } else {
+        summary.hidden = true;
+      }
+    }
+    updateStartButton();
+  }
+
+  function updateStartButton() {
+    if (!btnStart) return;
+    const isHost = mode === 'host';
+    btnStart.hidden = !isHost || matchPhase !== 'lobby';
+    if (!isHost) return;
+    const n = roster.length;
+    const allReady = n > 0 && roster.every(p => p.ready && p.connected !== false);
+    btnStart.disabled = !allReady;
+  }
+
+  function updateConnQualityUI() {
+    const el = $('lobbyConn');
+    if (!el) return;
+    if (mode === 'solo' || matchPhase === 'idle') {
+      el.textContent = '';
+      return;
+    }
+    if (matchPhase === 'connecting') {
+      el.textContent = t('connChecking');
+      return;
+    }
+    if (connQualityLabel === 'good') el.textContent = t('connGood');
+    else if (connQualityLabel === 'fair') el.textContent = t('connFair');
+    else if (connQualityLabel === 'poor') el.textContent = t('connPoor');
+    else el.textContent = t('connChecking');
+  }
+
+  function sampleConnQuality() {
+    let rtt = null;
+    try {
+      if (mode === 'guest' && guestConn && guestConn.peerConnection) {
+        // Best-effort: use pendingStart maxRtt when available; else fair default
+      }
+    } catch (_) {}
+    if (pendingStart && pendingStart.maxRtt) rtt = pendingStart.maxRtt;
+    if (rtt == null) {
+      connQualityLabel = mode === 'host' && connections.size === 0 ? 'good' : 'fair';
+    } else if (rtt < 120) connQualityLabel = 'good';
+    else if (rtt < 280) connQualityLabel = 'fair';
+    else connQualityLabel = 'poor';
+    updateConnQualityUI();
+  }
+
+  function startConnQualityWatch() {
+    stopConnQualityWatch();
+    sampleConnQuality();
+    connQualityTimer = setInterval(sampleConnQuality, 3000);
+  }
+
+  function stopConnQualityWatch() {
+    if (connQualityTimer) clearInterval(connQualityTimer);
+    connQualityTimer = 0;
+  }
+
+  /** Soft return to lobby — PeerJS session stays open. */
+  function returnToLobbySession() {
+    if (mode !== 'host' && mode !== 'guest') {
+      showMenu();
+      return;
+    }
+    stopLoop();
+    clearCountdown();
+    clearPendingStart();
+    clearAllReconnectGraces();
+    stopPostHeartbeat();
+    ended = false;
+    eliminated = false;
+    paused = false;
+    pausedById = null;
+    running = false;
+    matchPhase = 'lobby';
+    roster.forEach(p => {
+      p.ready = false;
+      p.alive = true;
+      if (p.connected == null) p.connected = true;
+    });
+    clearBoards();
+    setPlayLayout(false);
+    gameEl.classList.remove('game-entering');
+    hide(gameEl);
+    hide(banner);
+    hide(btnAgain);
+    hideOverlayPanels();
+    hide(netPanel);
+    showLobby();
     if (mode === 'host') {
       broadcastRoster();
-      tryHostStart();
+      broadcastLobbySettings();
     }
+    const a = audio();
+    if (a) a.stopMusic(350);
+  }
+
+  /** Tear down Peer session and return to main menu. */
+  function leaveSession(opts) {
+    const silent = opts && opts.silent;
+    const reason = (opts && opts.reason) || '';
+    sessionLeaving = true;
+    clearAllReconnectGraces();
+    stopConnQualityWatch();
+    try {
+      if (!silent) {
+        if (mode === 'host') broadcast({t: 'leave', from: myId, host: true});
+        else if (mode === 'guest' && guestConn) sendTo(guestConn, {t: 'leave', from: myId});
+      }
+    } catch (_) {}
+    const note = reason;
+    setTimeout(() => {
+      closeNet();
+      sessionLeaving = false;
+      storageSet(SESSION_HOST_KEY, '');
+      setLobbyUrl(null);
+      showMenu();
+      if (note && $('menu')) {
+        // brief status via menu hint if present
+      }
+      if (note && netPanel && !netPanel.hidden) $('netStatus').textContent = note;
+    }, 40);
+  }
+
+  function beginReconnectGrace(peerId, name) {
+    if (!peerId || peerId === myId) return;
+    clearReconnectGrace(peerId);
+    const p = roster.find(x => x.id === peerId);
+    if (p) {
+      p.connected = false;
+      p.ready = false;
+    }
+    const until = performance.now() + RECONNECT_GRACE_MS;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((until - performance.now()) / 1000));
+      if ($('ctrlHint') && (matchPhase === 'playing' || matchPhase === 'countdown')) {
+        $('ctrlHint').textContent = t('reconnectingPeer', {name: name || t('defaultName'), s: left});
+      } else if ($('lobbyStatus')) {
+        $('lobbyStatus').textContent = t('reconnectingPeer', {name: name || t('defaultName'), s: left});
+      }
+      if (left <= 0) return;
+      const g = reconnectGraces.get(peerId);
+      if (g) g.uiTimer = setTimeout(tick, 1000);
+    };
+    const timer = setTimeout(() => {
+      reconnectGraces.delete(peerId);
+      const leftName = name || t('defaultName');
+      notifyPeerLeft(leftName);
+      if (matchPhase === 'playing' || matchPhase === 'countdown') {
+        markDead(peerId);
+        if (mode === 'host') {
+          broadcast({t: 'over', from: peerId});
+          checkWinner();
+        } else checkSelfWin();
+      } else if (matchPhase === 'lobby' || matchPhase === 'post') {
+        roster = roster.filter(x => x.id !== peerId);
+        if (mode === 'host') broadcastRoster();
+        else renderRoster();
+      }
+    }, RECONNECT_GRACE_MS);
+    reconnectGraces.set(peerId, {timer, name, until, uiTimer: 0});
+    tick();
+    renderRoster();
+  }
+
+  function notePeerReconnected(peerId) {
+    clearReconnectGrace(peerId);
+    const p = roster.find(x => x.id === peerId);
+    if (p) p.connected = true;
+    renderRoster();
   }
 
   /* ---------- networking ---------- */
@@ -3230,7 +3551,6 @@
     postLastSeen.delete(peerId);
     roster = roster.filter(p => p.id !== peerId);
     broadcastRoster();
-    tryHostStart();
     return true;
   }
 
@@ -3929,26 +4249,42 @@
   }
 
   function broadcastRoster() {
-    const payload = {t: 'roster', players: roster.map(p => ({id: p.id, name: p.name, ready: !!p.ready, alive: p.alive !== false}))};
+    const payload = {
+      t: 'roster',
+      players: roster.map(p => ({
+        id: p.id,
+        name: p.name,
+        ready: !!p.ready,
+        alive: p.alive !== false,
+        connected: p.connected !== false,
+      })),
+    };
     broadcast(payload);
     renderRoster();
-    if (matchPhase === 'post') updateRematchHint();
   }
 
   function tryHostStart() {
     if (mode !== 'host') return;
-    if (matchPhase !== 'lobby' && matchPhase !== 'post') return;
+    if (matchPhase !== 'lobby') return;
     if (pendingStart) return;
     if (roster.length < 1) return;
-    if (!roster.every(p => p.ready)) return;
+    if (!roster.every(p => p.ready && p.connected !== false)) return;
     const ids = roster.map(p => p.id);
     const players = ids.map(id => {
       const p = roster.find(x => x.id === id);
       return {id, name: p.name};
     });
     const guestIds = ids.filter(id => id !== myId);
-    broadcast({t: 'start', speedRamp: timeRampEnabled, dropSpeed, garbageTarget, powerUps: powerUpsEnabled, players});
-    // Solo host: no peers to sync with.
+    broadcast({
+      t: 'start',
+      playMode,
+      speedRamp: timeRampEnabled,
+      dropSpeed,
+      garbageTarget,
+      powerUps: powerUpsEnabled,
+      players,
+    });
+    // Solo host session (no guests): start immediately.
     if (!guestIds.length) {
       startRemoteMatch(players);
       return;
@@ -4079,7 +4415,24 @@
     }
     if (matchPhase === 'post') touchPostSeen(fromId);
     if (data.t === 'hello') {
-      if (pendingStart || matchPhase === 'playing' || matchPhase === 'countdown' || (matchPhase !== 'lobby' && matchPhase !== 'post')) {
+      // Rejoin within reconnect grace mid-match (same peer id).
+      if ((matchPhase === 'playing' || matchPhase === 'countdown') && reconnectGraces.has(fromId)) {
+        notePeerReconnected(fromId);
+        sendTo(connections.get(fromId), {t: 'welcome', id: fromId, code: roomCode, hostId: myId});
+        sendTo(connections.get(fromId), settingsPayload());
+        return;
+      }
+      if (pendingStart || matchPhase === 'playing' || matchPhase === 'countdown') {
+        sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
+        connections.get(fromId)?.close();
+        connections.delete(fromId);
+        return;
+      }
+      // Post-match: pull session back to lobby so the peer can sit with everyone.
+      if (matchPhase === 'post') {
+        returnToLobbySession();
+      }
+      if (matchPhase !== 'lobby') {
         sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
         connections.get(fromId)?.close();
         connections.delete(fromId);
@@ -4087,7 +4440,7 @@
       }
       const existing = roster.find(p => p.id === fromId);
       if (!existing) {
-        if (matchPhase !== 'lobby' || pendingStart) {
+        if (pendingStart) {
           sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
           connections.get(fromId)?.close();
           connections.delete(fromId);
@@ -4104,13 +4457,20 @@
           name: sanitizeName(data.name),
           ready: false,
           alive: true,
+          connected: true,
         });
         roster.forEach(p => { p.ready = false; });
         if ($('lobbyStatus')) {
           $('lobbyStatus').textContent = t('peerJoined', {name: sanitizeName(data.name)});
         }
+      } else {
+        existing.name = sanitizeName(data.name);
+        existing.connected = true;
+        existing.ready = false;
+        notePeerReconnected(fromId);
       }
       sendTo(connections.get(fromId), {t: 'welcome', id: fromId, code: roomCode, hostId: myId});
+      sendTo(connections.get(fromId), settingsPayload());
       broadcastRoster();
       return;
     }
@@ -4132,10 +4492,9 @@
     }
     if (data.t === 'ready') {
       const p = roster.find(x => x.id === fromId);
-      if (!p) return;
+      if (!p || matchPhase !== 'lobby') return;
       p.ready = !!data.ready;
       broadcastRoster();
-      tryHostStart();
       return;
     }
     if (data.t === 'state') {
@@ -4161,11 +4520,24 @@
       broadcast({t: 'pause', on: !!data.on, from: data.from || fromId}, fromId);
       return;
     }
+    if (data.t === 'leave') {
+      const left = roster.find(p => p.id === fromId);
+      const leftName = left ? left.name : t('defaultName');
+      clearReconnectGrace(fromId);
+      roster = roster.filter(p => p.id !== fromId);
+      connections.delete(fromId);
+      if (matchPhase === 'playing' || matchPhase === 'countdown') {
+        markDead(fromId);
+        checkWinner();
+      } else {
+        if ($('lobbyStatus')) $('lobbyStatus').textContent = t('peerLeftLobby', {name: leftName});
+        broadcastRoster();
+      }
+      return;
+    }
     if (data.t === 'rematch') {
-      const p = roster.find(x => x.id === fromId);
-      if (p) p.ready = true;
-      broadcastRoster();
-      tryHostStart();
+      // Legacy: treat as request to return to lobby session.
+      if (matchPhase === 'post') returnToLobbySession();
     }
   }
 
@@ -4194,34 +4566,43 @@
       myId = data.id;
       roomCode = data.code || roomCode;
       hostPlayerId = data.hostId || hostPlayerId || roomCode;
+      setLobbyUrl(roomCode);
+      storageSet(SESSION_HOST_KEY, '');
       migratePhase = null;
       migrateAttempt = 0;
       clearMigrateTimer();
-      if (matchPhase === 'lobby' || matchPhase === 'idle') {
-        $('lobbyStatus').textContent = '';
+      if (matchPhase === 'lobby' || matchPhase === 'idle' || matchPhase === 'connecting') {
         showLobby();
       } else if (matchPhase === 'post') {
-        updateRematchHint();
-        startPostHeartbeat();
+        returnToLobbySession();
       }
       return;
     }
+    if (data.t === 'settings') {
+      applyLobbySettings(data);
+      return;
+    }
     if (data.t === 'roster') {
-      roster = data.players || [];
-      if (matchPhase === 'lobby' || matchPhase === 'idle') {
+      roster = (data.players || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        ready: !!p.ready,
+        alive: p.alive !== false,
+        connected: p.connected !== false,
+      }));
+      if (matchPhase === 'lobby' || matchPhase === 'idle' || matchPhase === 'connecting') {
         matchPhase = 'lobby';
         showLobby();
       }
       renderRoster();
-      if (matchPhase === 'post') updateRematchHint();
       return;
     }
     if (data.t === 'start') {
+      applyLobbySettings(data);
       timeRampEnabled = data.speedRamp !== false;
       dropSpeed = DROP_SPEED[data.dropSpeed] ? data.dropSpeed : 'normal';
       garbageTarget = GARBAGE_TARGET[data.garbageTarget] ? data.garbageTarget : 'clockwise';
       powerUpsEnabled = !!data.powerUps;
-      // Ack first so the host can schedule a shared `go`; do not start countdown yet.
       clearPendingStart();
       pendingStart = { players: data.players || [] };
       netSend({t: 'startAck'});
@@ -4275,6 +4656,19 @@
       applyMatchPause(!!data.on, data.from);
       return;
     }
+    if (data.t === 'leave') {
+      // Host ended the session intentionally.
+      sessionLeaving = true;
+      closeNet();
+      sessionLeaving = false;
+      setLobbyUrl(null);
+      showMenu();
+      if ($('netStatus')) {
+        show(netPanel);
+        $('netStatus').textContent = t('hostEndedSession');
+      }
+      return;
+    }
     if (data.t === 'win') {
       applyWin(data.id);
     }
@@ -4300,18 +4694,21 @@
       }
       if (cdReadyWait) dropCdReadyPeer(peerId);
       if (matchPhase === 'lobby') {
-        roster = roster.filter(p => p.id !== peerId);
-        roster.forEach(p => { p.ready = false; });
-        broadcastRoster();
+        const left = roster.find(p => p.id === peerId);
+        if (sessionLeaving) {
+          roster = roster.filter(p => p.id !== peerId);
+          broadcastRoster();
+        } else {
+          beginReconnectGrace(peerId, left && left.name);
+          broadcastRoster();
+        }
       } else if (matchPhase === 'playing' || matchPhase === 'countdown') {
         const left = roster.find(p => p.id === peerId);
-        notifyPeerLeft(left && left.name);
         if (paused && pausedById === peerId) {
           applyMatchPause(false);
           broadcast({t: 'pause', on: false, from: peerId});
         }
-        markDead(peerId);
-        checkWinner();
+        beginReconnectGrace(peerId, left && left.name);
       } else if (matchPhase === 'post') {
         removePostPeer(peerId);
       }
@@ -4329,7 +4726,7 @@
     else c.on('open', onOpen);
     c.on('data', onGuestData);
     c.on('close', () => {
-      if (suppressNetClose || mode !== 'guest') return;
+      if (suppressNetClose || mode !== 'guest' || sessionLeaving) return;
       if (guestConn !== c) return; // ignore stale close from a replaced connection
       clearPendingStart();
       if (migratePhase === 'reconnecting') {
@@ -4337,12 +4734,24 @@
         return;
       }
       if (migratePhase === 'taking') return;
+      if (matchPhase === 'playing' || matchPhase === 'countdown') {
+        // Host peer id is the lobby code — reconnect to the same session id.
+        if ($('ctrlHint')) {
+          $('ctrlHint').textContent = t('reconnectingPeer', {
+            name: t('defaultName'),
+            s: Math.ceil(RECONNECT_GRACE_MS / 1000),
+          });
+        }
+        migratePhase = 'reconnecting';
+        scheduleGuestReconnect(0);
+        return;
+      }
       if (canMigratePhase()) {
         handleHostLost();
         return;
       }
       if (matchPhase !== 'idle') {
-        $('ctrlHint').textContent = t('disconnected');
+        if ($('ctrlHint')) $('ctrlHint').textContent = t('disconnected');
       }
     });
     c.on('error', () => {
@@ -4377,7 +4786,6 @@
     me.ready = !me.ready;
     if (mode === 'host') {
       broadcastRoster();
-      tryHostStart();
     } else {
       netSend({t: 'ready', ready: me.ready, from: myId});
       renderRoster();
@@ -4388,9 +4796,12 @@
     roomCode = code;
     myId = code;
     hostPlayerId = code;
-    playMode = 'versus';
+    if (!LOBBY_MATCH_MODES.includes(playMode)) playMode = 'versus';
+    storageSet(SESSION_HOST_KEY, code);
+    setLobbyUrl(code);
     const name = setPlayerName(getPlayerName());
-    roster = [{id: myId, name, ready: false, alive: true}];
+    roster = [{id: myId, name, ready: false, alive: true, connected: true}];
+    matchPhase = 'lobby';
     showLobby();
     if ($('lobbyStatus')) $('lobbyStatus').textContent = t('waitingPeers');
   }
@@ -4406,18 +4817,20 @@
     setTimeout(() => $('netIn').focus(), 50);
   }
 
-  function hostRoom(attempt) {
+  function hostRoom(attempt, preferredCode) {
     closeNet();
     mode = 'host';
-    matchPhase = 'lobby';
-    const code = makeCode();
+    matchPhase = 'connecting';
+    const code = (preferredCode && preferredCode.length === 5) ? preferredCode : makeCode();
     roomCode = code;
     peer = new Peer(code, PEER_CONFIG);
     peer.on('open', id => showHostUI(id));
     peer.on('connection', acceptHostConnection);
     peer.on('error', err => {
       if (err.type === 'unavailable-id' && attempt < 8) {
-        hostRoom(attempt + 1);
+        // Stable lobby code is intentional: retry same code a few times, then mint a new one.
+        if (preferredCode && attempt >= 3) hostRoom(attempt + 1, null);
+        else hostRoom(attempt + 1, preferredCode || code);
         return;
       }
       hide(lobbyEl);
@@ -4429,6 +4842,9 @@
       hide($('roomCode'));
       hide($('btnCopy'));
       $('netLabel').textContent = t('hostFail');
+      matchPhase = 'idle';
+      setLobbyUrl(null);
+      storageSet(SESSION_HOST_KEY, '');
     });
   }
 
@@ -4441,8 +4857,10 @@
     }
     closeNet();
     mode = 'guest';
-    matchPhase = 'lobby';
+    matchPhase = 'connecting';
     roomCode = code;
+    setLobbyUrl(code);
+    storageSet(SESSION_HOST_KEY, '');
     $('btnNetGo').disabled = true;
     $('netStatus').textContent = t('connecting');
     peer = new Peer(undefined, PEER_CONFIG);
@@ -4453,6 +4871,7 @@
     peer.on('error', err => {
       $('btnNetGo').disabled = false;
       $('netStatus').textContent = t('joinFail', {err: err.type || t('err')});
+      matchPhase = 'idle';
     });
   }
 
@@ -4513,7 +4932,7 @@
     }
   }
 
-  function openNetUI(kind) {
+  function openNetUI(kind, preferredCode) {
     playMode = 'versus';
     setPlayerName(menuName.value || getPlayerName());
     hide(menu);
@@ -4522,12 +4941,14 @@
     if (kind === 'host') {
       hide(netPanel);
       $('netStatus') && ($('netStatus').textContent = t('connectingHost'));
-      hostRoom(0);
+      hostRoom(0, preferredCode || null);
     } else {
       show(netPanel);
       mode = 'guest';
+      matchPhase = 'connecting';
       $('btnNetGo').disabled = false;
       showJoinUI();
+      if (preferredCode && $('netIn')) $('netIn').value = preferredCode;
     }
   }
 
@@ -4721,7 +5142,7 @@
   if ($('btnPauseSettings')) $('btnPauseSettings').onclick = menuClick(showSettings);
   if ($('btnPauseMenu')) $('btnPauseMenu').onclick = menuClick(quitFromPause);
   if ($('btnResultsAgain')) $('btnResultsAgain').onclick = menuClick(rematch);
-  if ($('btnResultsMenu')) $('btnResultsMenu').onclick = menuClick(showMenu);
+  if ($('btnResultsMenu')) $('btnResultsMenu').onclick = menuClick(() => leaveSession());
   if ($('btnResetBinds')) {
     $('btnResetBinds').onclick = menuClick(() => {
       setBinds({ ...DEFAULT_BINDS });
@@ -4792,21 +5213,49 @@
   }
   syncSettingsUI();
   syncMuteBtn();
-  $('btnNetBack').onclick = menuClick(showMenu);
-  $('btnLobbyLeave').onclick = menuClick(showMenu);
+  $('btnNetBack').onclick = menuClick(() => leaveSession({silent: true}));
+  $('btnLobbyLeave').onclick = menuClick(() => leaveSession());
   $('btnNetGo').onclick = menuClick(joinRoom);
   $('btnReady').onclick = menuClick(toggleReady);
+  if (btnStart) btnStart.onclick = menuClick(() => tryHostStart());
+  function hostSettingChanged() {
+    if (mode !== 'host' || matchPhase !== 'lobby') return;
+    // Changing settings clears ready so nobody starts on stale rules.
+    roster.forEach(p => { p.ready = false; });
+    broadcastLobbySettings();
+    broadcastRoster();
+  }
+  if (selMatchMode) {
+    selMatchMode.addEventListener('change', () => {
+      if (mode === 'host' && LOBBY_MATCH_MODES.includes(selMatchMode.value)) {
+        playMode = selMatchMode.value;
+        hostSettingChanged();
+      }
+    });
+  }
   selSpeedRamp.addEventListener('change', () => {
-    if (mode === 'host') timeRampEnabled = selSpeedRamp.value === 'on';
+    if (mode === 'host') {
+      timeRampEnabled = selSpeedRamp.value === 'on';
+      hostSettingChanged();
+    }
   });
   selPowerUps.addEventListener('change', () => {
-    if (mode === 'host') powerUpsEnabled = selPowerUps.value === 'on';
+    if (mode === 'host') {
+      powerUpsEnabled = selPowerUps.value === 'on';
+      hostSettingChanged();
+    }
   });
   selDropSpeed.addEventListener('change', () => {
-    if (mode === 'host' && DROP_SPEED[selDropSpeed.value]) dropSpeed = selDropSpeed.value;
+    if (mode === 'host' && DROP_SPEED[selDropSpeed.value]) {
+      dropSpeed = selDropSpeed.value;
+      hostSettingChanged();
+    }
   });
   selGarbageTarget.addEventListener('change', () => {
-    if (mode === 'host' && GARBAGE_TARGET[selGarbageTarget.value]) garbageTarget = selGarbageTarget.value;
+    if (mode === 'host' && GARBAGE_TARGET[selGarbageTarget.value]) {
+      garbageTarget = selGarbageTarget.value;
+      hostSettingChanged();
+    }
   });
   menuName.addEventListener('change', () => setPlayerName(menuName.value));
   menuName.addEventListener('blur', () => setPlayerName(menuName.value));
@@ -4828,7 +5277,14 @@
   });
   async function copyCode() {
     try {
-      await navigator.clipboard.writeText(roomCode || $('lobbyCode').textContent);
+      const code = roomCode || $('lobbyCode').textContent;
+      let text = code;
+      try {
+        const url = new URL(location.href);
+        url.searchParams.set('lobby', String(code).toUpperCase());
+        text = code + ' · ' + url.origin + url.pathname + '?lobby=' + String(code).toUpperCase();
+      } catch (_) {}
+      await navigator.clipboard.writeText(text);
       $('lobbyStatus').textContent = t('codeCopied');
       if (!$('netPanel').hidden) $('netStatus').textContent = t('codeCopied');
     } catch (_) {
@@ -4837,7 +5293,7 @@
   }
   $('btnCopy').onclick = copyCode;
   $('btnCopyLobby').onclick = copyCode;
-  $('btnMenu').onclick = menuClick(showMenu);
+  $('btnMenu').onclick = menuClick(() => leaveSession());
   $('btnAgain').onclick = menuClick(rematch);
   $('btnLangDa').onclick = () => setLang('da');
   $('btnLangEn').onclick = () => setLang('en');
@@ -4852,4 +5308,18 @@
     chkShake.addEventListener('change', () => setShake(chkShake.checked));
   }
   applyI18n();
+
+  // Resume lobby from ?lobby=CODE. Host peer id === lobby code (stable session id).
+  (function bootLobbyFromUrl() {
+    const code = getLobbyUrlCode();
+    if (!code) return;
+    const wasHost = storageGet(SESSION_HOST_KEY) === code;
+    setTimeout(() => {
+      if (wasHost) openNetUI('host', code);
+      else {
+        openNetUI('guest', code);
+        joinRoom();
+      }
+    }, 50);
+  })();
 })();
