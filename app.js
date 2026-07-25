@@ -146,14 +146,6 @@
     a.setIntensity(clamp01(levelPart * 0.55 + height * 0.55));
   }
 
-  let musicIntensityAcc = 0;
-  function maybeUpdateMusicIntensity(board, dt) {
-    musicIntensityAcc += dt;
-    if (musicIntensityAcc < 250) return;
-    musicIntensityAcc = 0;
-    updateMusicIntensity(board);
-  }
-
   function clamp01(n) {
     return Math.max(0, Math.min(1, n));
   }
@@ -607,7 +599,6 @@
     const out = document.getElementById('outGrid');
     if (rng) rng.value = String(gridOpacity);
     if (out) out.textContent = String(gridOpacity);
-    boards.forEach(b => { b._bgKey = ''; b._bgCanvas = null; b._vgCanvas = null; });
   }
 
   const BIND_DEFS = [
@@ -774,56 +765,38 @@
     return LEVEL_THEMES[idx];
   }
 
-  function themeIndexForLevel(level) {
-    return Math.min(LEVEL_THEMES.length - 1, Math.max(0, ((level - 1) / 5) | 0));
-  }
-
-  let stageElCache = null;
-  let hostElCache = null;
-  let appliedThemeIdx = -1;
-  let shakeWasActive = false;
-
   function applyStagePresentation(now) {
-    if (!stageElCache || !stageElCache.isConnected) {
-      stageElCache = document.querySelector('.game-stage');
-      hostElCache = null;
-    }
-    const stage = stageElCache;
+    const stage = document.querySelector('.game-stage');
     if (!stage) return;
-
     const local = boards.find(b => b.live);
     const level = (local && local.level) || 1;
-    const themeIdx = themeIndexForLevel(level);
-    if (themeIdx !== appliedThemeIdx) {
-      appliedThemeIdx = themeIdx;
-      const theme = LEVEL_THEMES[themeIdx];
-      const root = document.documentElement;
-      root.style.setProperty('--stage-tint', theme.tint);
-      root.style.setProperty('--stage-ember', theme.ember);
-      root.style.setProperty('--torch-warm', theme.warm);
-      root.style.setProperty('--torch-cool', theme.cool);
-      root.style.setProperty('--well-glow', theme.glow);
-    }
+    const theme = themeForLevel(level);
+    const root = document.documentElement;
+    root.style.setProperty('--stage-tint', theme.tint);
+    root.style.setProperty('--stage-ember', theme.ember);
+    root.style.setProperty('--torch-warm', theme.warm);
+    root.style.setProperty('--torch-cool', theme.cool);
+    root.style.setProperty('--well-glow', theme.glow);
+
+    // Keep the chamber art locked — idle parallax felt like constant drift/shake.
+    stage.style.backgroundPosition = 'center, center, center center';
+    stage.style.transform = '';
 
     let tx = 0, ty = 0;
-    const shaking = shakeEnabled && shakeState.until > now;
-    if (shaking) {
+    if (shakeEnabled && shakeState.until > now) {
       const p = Math.max(0, (shakeState.until - now) / shakeState.dur);
+      // Ease-out: strong at impact, settles quickly
       const m = shakeState.mag * p;
       const t = (1 - p) * 22 + shakeState.phase;
       tx = Math.sin(t * 2.0) * m;
       ty = Math.cos(t * 2.6) * m * 0.45;
     }
-    if (!hostElCache || !hostElCache.isConnected || !stage.contains(hostElCache)) {
-      hostElCache = stage.querySelector('.player.board-host');
-    }
-    const host = hostElCache;
-    if (host && (shaking || shakeWasActive)) {
-      host.style.transform = shaking
+    const host = stage.querySelector('.player.board-host');
+    if (host) {
+      host.style.transform = (tx || ty)
         ? 'translate3d(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px,0)'
         : '';
     }
-    shakeWasActive = shaking;
   }
 
   function t(key, vars) {
@@ -891,7 +864,7 @@
         b.els.lines = b.els.meta.querySelector('.ln');
       }
       if (b.over && b.els && b.els.over) {
-        setBoardOverLabel(b, b.live && eliminated ? t('eliminated') : t('topOut'));
+        b.els.over.textContent = b.live && eliminated ? t('eliminated') : t('topOut');
       }
       if (typeof b.paintHud === 'function') b.paintHud();
     });
@@ -1105,15 +1078,10 @@
     return [0, 100, 300, 500, 800][cleared] || 0;
   }
 
-  const RGB_CACHE = Object.create(null);
   function hexToRgb(hex) {
-    let rgb = RGB_CACHE[hex];
-    if (rgb) return rgb;
-    const h = String(hex || '').replace('#', '');
-    const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16) || 0;
-    rgb = {r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255};
-    RGB_CACHE[hex] = rgb;
-    return rgb;
+    const h = hex.replace('#', '');
+    const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+    return {r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255};
   }
 
   function shadeRgb(rgb, f) {
@@ -1146,8 +1114,8 @@
 
     const color = iron ? GARBAGE_COLOR : (SHAPES[type] && SHAPES[type].color) || (typeof cell === 'string' ? cell : '#888');
 
-    // Soft inner glow only while settling/clearing — static cells skip the arc fill.
-    if (!ghost && !iron && size >= 12 && pulse > 0) {
+    // Soft inner glow plate under the block (skip ghosts / tiny cells)
+    if (!ghost && !iron && size >= 12) {
       const rgb = hexToRgb(color);
       ctx.fillStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + (0.16 + pulse * 0.2) + ')';
       ctx.beginPath();
@@ -1929,9 +1897,6 @@
       if (block === this.block && nextSize === this.nextSize) return;
       this.block = block;
       this.nextSize = nextSize;
-      this._bgKey = '';
-      this._bgCanvas = null;
-      this._vgCanvas = null;
       const main = this.ctx.canvas;
       main.width = COLS * block;
       main.height = ROWS * block;
@@ -1947,66 +1912,37 @@
       this.paintHud();
     }
 
-    ensureBoardLayers() {
-      const themeIdx = themeIndexForLevel(this.level || 1);
-      const key = this.block + '|' + themeIdx + '|' + gridOpacity;
-      if (this._bgKey === key && this._bgCanvas && this._vgCanvas) return;
-      const s = this.block;
-      const bw = COLS * s, bh = ROWS * s;
-      const bg = document.createElement('canvas');
-      bg.width = bw;
-      bg.height = bh;
-      const bctx = bg.getContext('2d');
-      const floor = bctx.createLinearGradient(0, 0, 0, bh);
-      floor.addColorStop(0, '#0c0a10');
-      floor.addColorStop(.55, '#08060c');
-      floor.addColorStop(1, '#050408');
-      bctx.fillStyle = floor;
-      bctx.fillRect(0, 0, bw, bh);
-      const theme = LEVEL_THEMES[themeIdx];
-      const sideWash = bctx.createLinearGradient(0, 0, bw, 0);
-      sideWash.addColorStop(0, theme.cool);
-      sideWash.addColorStop(.18, 'rgba(0,0,0,0)');
-      sideWash.addColorStop(.82, 'rgba(0,0,0,0)');
-      sideWash.addColorStop(1, theme.warm);
-      bctx.fillStyle = sideWash;
-      bctx.fillRect(0, 0, bw, bh);
-      if (gridOpacity > 0) {
-        bctx.strokeStyle = 'rgba(180,150,70,' + (gridOpacity / 100) + ')';
-        bctx.lineWidth = 1;
-        bctx.beginPath();
-        for (let x = 0; x <= COLS; x++) {
-          bctx.moveTo(x * s + .5, 0);
-          bctx.lineTo(x * s + .5, bh);
-        }
-        for (let y = 0; y <= ROWS; y++) {
-          bctx.moveTo(0, y * s + .5);
-          bctx.lineTo(bw, y * s + .5);
-        }
-        bctx.stroke();
-      }
-      const vg = document.createElement('canvas');
-      vg.width = bw;
-      vg.height = bh;
-      const vctx = vg.getContext('2d');
-      const grad = vctx.createRadialGradient(bw / 2, bh * .42, Math.min(bw, bh) * .18, bw / 2, bh * .5, Math.max(bw, bh) * .78);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(.55, 'rgba(0,0,0,.18)');
-      grad.addColorStop(1, 'rgba(0,0,0,.62)');
-      vctx.fillStyle = grad;
-      vctx.fillRect(0, 0, bw, bh);
-      this._bgKey = key;
-      this._bgCanvas = bg;
-      this._vgCanvas = vg;
-    }
-
     draw() {
       const ctx = this.ctx, s = this.block;
       const bw = COLS * s, bh = ROWS * s;
       this.syncVis(false);
-      this.ensureBoardLayers();
       ctx.clearRect(0, 0, bw, bh);
-      ctx.drawImage(this._bgCanvas, 0, 0);
+      // Void floor matching the chamber well (not a flat UI screen)
+      const floor = ctx.createLinearGradient(0, 0, 0, bh);
+      floor.addColorStop(0, '#0c0a10');
+      floor.addColorStop(.55, '#08060c');
+      floor.addColorStop(1, '#050408');
+      ctx.fillStyle = floor;
+      ctx.fillRect(0, 0, bw, bh);
+      const theme = themeForLevel(this.level || 1);
+      // Soft side wash from room torches — shifts with level theme
+      const sideWash = ctx.createLinearGradient(0, 0, bw, 0);
+      sideWash.addColorStop(0, theme.cool);
+      sideWash.addColorStop(.18, 'rgba(0,0,0,0)');
+      sideWash.addColorStop(.82, 'rgba(0,0,0,0)');
+      sideWash.addColorStop(1, theme.warm);
+      ctx.fillStyle = sideWash;
+      ctx.fillRect(0, 0, bw, bh);
+      if (gridOpacity > 0) {
+        ctx.strokeStyle = 'rgba(180,150,70,' + (gridOpacity / 100) + ')';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= COLS; x++) {
+          ctx.beginPath(); ctx.moveTo(x * s + .5, 0); ctx.lineTo(x * s + .5, bh); ctx.stroke();
+        }
+        for (let y = 0; y <= ROWS; y++) {
+          ctx.beginPath(); ctx.moveTo(0, y * s + .5); ctx.lineTo(bw, y * s + .5); ctx.stroke();
+        }
+      }
 
       const anim = this.clearAnim;
       const dying = anim ? new Set(anim.rows) : null;
@@ -2058,7 +1994,13 @@
         }
       }
 
-      ctx.drawImage(this._vgCanvas, 0, 0);
+      // Deep stone recess — edges fall into the chamber shadow
+      const vg = ctx.createRadialGradient(bw / 2, bh * .42, Math.min(bw, bh) * .18, bw / 2, bh * .5, Math.max(bw, bh) * .78);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(.55, 'rgba(0,0,0,.18)');
+      vg.addColorStop(1, 'rgba(0,0,0,.62)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, bw, bh);
       if (this.flashUntil && performance.now() < this.flashUntil) {
         const fade = (this.flashUntil - performance.now()) / 200;
         const a = Math.max(0, Math.min(.35, fade * .35));
@@ -2113,7 +2055,7 @@
       if ('b2b' in data) this.b2b = !!data.b2b;
       this.over = !!data.over;
       this.paintHud();
-      setBoardOverLabel(this, this.over ? t('topOut') : '');
+      if (this.els.over) this.els.over.textContent = this.over ? t('topOut') : '';
       const gained = this.lines - prevLines;
       if (gained > 0) showClearFx(this, Math.min(4, gained), 0);
     }
@@ -2291,27 +2233,6 @@
     else showMenu();
   }
 
-  function resultsOpen() {
-    const panel = $('results');
-    return !!(panel && !panel.hidden);
-  }
-
-  function clearBoardOverLabels() {
-    boards.forEach(b => {
-      if (b.els && b.els.over) b.els.over.textContent = '';
-    });
-  }
-
-  function setBoardOverLabel(board, text) {
-    if (!board || !board.els || !board.els.over) return;
-    // Results overlay owns the end-of-match UI — keep board plaques clear under it.
-    if (resultsOpen()) {
-      board.els.over.textContent = '';
-      return;
-    }
-    board.els.over.textContent = text || '';
-  }
-
   function showResults(titleText) {
     const panel = $('results');
     const title = $('resultsTitle');
@@ -2320,7 +2241,10 @@
     hide($('pause'));
     hide(banner);
     hide(btnAgain);
-    clearBoardOverLabels();
+    // Clear in-board ELIMINATED / TOP OUT so it does not sit under the results overlay.
+    boards.forEach(b => {
+      if (b.els && b.els.over) b.els.over.textContent = '';
+    });
     if (title) title.textContent = titleText || t('results');
     const board = boards.find(b => b.live) || boardById.get(myId);
     const stats = board && board.getMatchStats ? board.getMatchStats() : null;
@@ -2356,39 +2280,11 @@
     updateRematchHint();
   }
 
-  let menuStatusTimer = 0;
-  function flashMenuStatus(text) {
-    const el = $('menuStatus');
-    if (!el) return;
-    if (menuStatusTimer) clearTimeout(menuStatusTimer);
-    el.hidden = false;
-    el.textContent = text || '';
-    menuStatusTimer = setTimeout(() => {
-      menuStatusTimer = 0;
-      el.hidden = true;
-      el.textContent = '';
-    }, 6000);
-  }
-
-  function clearMenuStatus() {
-    const el = $('menuStatus');
-    if (menuStatusTimer) clearTimeout(menuStatusTimer);
-    menuStatusTimer = 0;
-    if (el) {
-      el.hidden = true;
-      el.textContent = '';
-    }
-  }
-
   function clearBoards() {
     boards = [];
     boardById.clear();
     boardsEl.innerHTML = '';
     boardsEl.classList.remove('multi');
-    stageElCache = null;
-    hostElCache = null;
-    appliedThemeIdx = -1;
-    shakeWasActive = false;
   }
 
   function getPlayViewport() {
@@ -2803,7 +2699,7 @@
     startConnQualityWatch();
   }
 
-  function showMenu() {
+  function showMenu(flashMsg) {
     stopLoop();
     clearCountdown();
     clearPendingStart();
@@ -2813,7 +2709,6 @@
     running = false;
     ended = false;
     eliminated = false;
-    mode = null;
     matchPhase = 'idle';
     roster = [];
     clearBoards();
@@ -2832,13 +2727,19 @@
     if (playMode === 'versus' || !SOLO_MODES.includes(playMode)) setPlayMode(loadPlayMode());
     else setPlayMode(playMode);
     show(menu);
+    const menuHint = menu && menu.querySelector('.hint[data-i18n="menuHint"]');
+    if (menuHint) {
+      if (flashMsg) {
+        menuHint.textContent = flashMsg;
+        window.setTimeout(() => {
+          if (menuHint.textContent === flashMsg) menuHint.textContent = t('menuHint');
+        }, 4500);
+      } else {
+        menuHint.textContent = t('menuHint');
+      }
+    }
     const a = audio();
     if (a) a.stopMusic(350);
-  }
-
-  function showMenuWithStatus(msg) {
-    showMenu();
-    if (msg) flashMenuStatus(msg);
   }
 
   function syncSettingsUI() {
@@ -3077,23 +2978,12 @@
     logicTimer = 0;
   }
 
-  function syncBackgroundLogicTimer() {
-    if (logicTimer) {
-      clearInterval(logicTimer);
-      logicTimer = 0;
-    }
-    // Only use setInterval while the tab is hidden — rAF is throttled/paused then.
-    if (running && document.hidden) {
-      last = performance.now();
-      logicTimer = setInterval(logicTick, 1000 / 60);
-    }
-  }
-
   function startLoop() {
     stopLoop();
     last = performance.now();
-    musicIntensityAcc = 0;
-    syncBackgroundLogicTimer();
+    // Logic uses setInterval so gravity continues when the tab/window is unfocused
+    // (requestAnimationFrame is paused or heavily throttled in the background).
+    logicTimer = setInterval(logicTick, 1000 / 60);
     raf = requestAnimationFrame(drawLoop);
   }
 
@@ -3114,22 +3004,15 @@
     if (!document.hidden && !paused) tickHeldKeys(dt);
     for (const b of boards) if (b.live) b.tick(dt);
     const mine = boards.find(b => b.live);
-    if (mine) maybeUpdateMusicIntensity(mine, dt);
+    if (mine) updateMusicIntensity(mine);
   }
 
-  function drawLoop(now) {
-    // Drive gameplay from the display refresh while visible (smoother input than dual clocks).
-    if (!document.hidden) logicTick();
+  function drawLoop() {
+    const now = performance.now();
     for (const b of boards) b.draw();
-    if (document.body.classList.contains('in-game')) applyStagePresentation(now || performance.now());
+    if (document.body.classList.contains('in-game')) applyStagePresentation(now);
     raf = requestAnimationFrame(drawLoop);
   }
-
-  document.addEventListener('visibilitychange', () => {
-    if (!running) return;
-    last = performance.now();
-    syncBackgroundLogicTimer();
-  });
 
   function sendGarbage(from, n) {
     netSend({t: 'garbage', n, from: from.playerId});
@@ -3237,15 +3120,14 @@
     }
     if (eliminated) return;
     eliminated = true;
-    setBoardOverLabel(board, mode === 'solo' ? t('topOut') : t('eliminated'));
+    if (board.els.over) board.els.over.textContent = mode === 'solo' ? t('topOut') : t('eliminated');
     markDead(board.playerId);
     if (mode === 'solo') {
       finishSoloRun(false);
       return;
     }
     netSend({t: 'over', from: board.playerId});
-    // Mid-match only — end-of-match uses the results panel, not a stacked banner.
-    if (!ended) showBanner(t('eliminated'), 'lose');
+    showBanner(t('eliminated'), 'lose');
     sfx('gameover');
     const a = audio();
     if (a) a.stopMusic(600);
@@ -3272,6 +3154,7 @@
     pausedById = null;
     hide($('pause'));
     const title = titleOverride || (won ? t('victory') : t('gameOver'));
+    showBanner(title, won ? 'win' : 'lose');
     if (won) {
       burstFireworks();
       sfx('win');
@@ -3290,7 +3173,7 @@
     const b = boardById.get(id);
     // Keep local "ELIMINATED" label if onTopOut already set it
     if (b && b.els.over && !(b.live && eliminated)) {
-      setBoardOverLabel(b, t('topOut'));
+      b.els.over.textContent = t('topOut');
     }
   }
 
@@ -3310,6 +3193,7 @@
       applyWin(winner.id);
     } else {
       const title = roster.length <= 1 ? t('gameOver') : t('draw');
+      showBanner(title, 'lose');
       showResults(title);
       showRematchBtn();
       startPostHeartbeat();
@@ -3339,11 +3223,13 @@
     let title;
     if (winnerId === myId) {
       title = t('victory');
+      showBanner(title, 'win');
       burstFireworks();
       sfx('win');
     } else {
       const w = roster.find(p => p.id === winnerId);
       title = t('wins', {name: w?.name || t('defaultName')});
+      showBanner(title, 'lose');
       sfx('gameover');
     }
     const a = audio();
@@ -3356,8 +3242,16 @@
 
   function showRematchBtn() {
     const label = t('playAgain');
-    const results = $('results');
-    const usingResults = results && !results.hidden;
+    const resultsEl = $('results');
+    const resultsVisible = resultsEl && !resultsEl.hidden;
+    // Prefer the results-panel buttons; avoid a second Play again under Eliminated.
+    if (resultsVisible) {
+      hide(btnAgain);
+    } else {
+      btnAgain.textContent = label;
+      btnAgain.disabled = false;
+      show(btnAgain);
+    }
     const btnResultsAgain = $('btnResultsAgain');
     if (btnResultsAgain) {
       btnResultsAgain.textContent = label;
@@ -3365,13 +3259,6 @@
     }
     const btnResultsMenu = $('btnResultsMenu');
     if (btnResultsMenu) btnResultsMenu.textContent = t('leave');
-    if (usingResults) {
-      hide(btnAgain);
-      return;
-    }
-    btnAgain.textContent = label;
-    btnAgain.disabled = false;
-    show(btnAgain);
     if ($('btnMenu')) $('btnMenu').textContent = t('leave');
   }
 
@@ -3647,11 +3534,7 @@
       sessionLeaving = false;
       storageSet(SESSION_HOST_KEY, '');
       setLobbyUrl(null);
-      showMenu();
-      if (note && $('menu')) {
-        // brief status via menu hint if present
-      }
-      if (note && netPanel && !netPanel.hidden) $('netStatus').textContent = note;
+      showMenu(note || '');
     }, 40);
   }
 
@@ -4143,11 +4026,7 @@
     burstDust(p.x, p.y, 3, '#d8c8a0');
   }
 
-  const FX_PARTICLE_CAP = 160;
   function pushParticle(p) {
-    if (fxParticles.length >= FX_PARTICLE_CAP) {
-      fxParticles.splice(0, fxParticles.length - FX_PARTICLE_CAP + 1);
-    }
     fxParticles.push(p);
     setFxLayerVisible(true);
     if (!fxRaf) {
@@ -4871,12 +4750,12 @@
       return;
     }
     if (data.t === 'leave') {
-      // Host ended the session intentionally — return to a clean main menu only.
+      // Host ended the session intentionally — main menu only (no join panel under it).
       sessionLeaving = true;
       closeNet();
-      setLobbyUrl(null);
-      showMenuWithStatus(t('hostEndedSession'));
       sessionLeaving = false;
+      setLobbyUrl(null);
+      showMenu(t('hostEndedSession'));
       return;
     }
     if (data.t === 'lobby') {
@@ -5147,7 +5026,6 @@
   }
 
   function openNetUI(kind, preferredCode) {
-    clearMenuStatus();
     playMode = 'versus';
     setPlayerName(menuName.value || getPlayerName());
     hide(menu);
