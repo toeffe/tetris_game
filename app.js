@@ -187,9 +187,10 @@
       startMatch: 'Start',
       leaveSession: 'Leave session',
       backToLobby: 'Back to lobby',
-      lobbyWaitingStart: 'All ready — host can start',
+      playAgainHint: 'Play again returns everyone to the lobby.',
+      lobbyWaitingStart: 'All ready — press Start',
       lobbyNeedReady: 'Ready up to play',
-      lobbyHostStart: 'Start when everyone is ready',
+      lobbyHostStart: 'Waiting for host to Start',
       settingsLive: 'Drop {speed} · Garbage {garbage} · Ramp {ramp} · Relics {relics}',
       connGood: 'Connection: good',
       connFair: 'Connection: fair',
@@ -374,9 +375,10 @@
       startMatch: 'Start',
       leaveSession: 'Forlad session',
       backToLobby: 'Tilbage til lobby',
-      lobbyWaitingStart: 'Alle klar — værten kan starte',
+      playAgainHint: 'Spil igen sender alle tilbage til lobbyen.',
+      lobbyWaitingStart: 'Alle klar — tryk Start',
       lobbyNeedReady: 'Tryk Klar for at spille',
-      lobbyHostStart: 'Start når alle er klar',
+      lobbyHostStart: 'Venter på at værten starter',
       settingsLive: 'Fald {speed} · Skrald {garbage} · Ramp {ramp} · Relikvier {relics}',
       connGood: 'Forbindelse: god',
       connFair: 'Forbindelse: middel',
@@ -921,6 +923,7 @@
   let reconnectGraces = new Map(); // peerId -> { timer, name, until }
   let connQualityLabel = 'checking';
   let connQualityTimer = 0;
+  let startArmTimer = 0;
   let last = 0, raf = 0, logicTimer = 0, countdownTimer = 0;
   // Synced match start: host waits for guest acks, then fires `go` and delays
   // its own countdown by ~RTT/2 so gravity does not begin a hop ahead of guests.
@@ -3196,7 +3199,7 @@
   }
 
   function showRematchBtn() {
-    const label = mode === 'solo' ? t('playAgain') : t('backToLobby');
+    const label = t('playAgain');
     btnAgain.textContent = label;
     btnAgain.disabled = false;
     show(btnAgain);
@@ -3205,6 +3208,9 @@
       btnResultsAgain.textContent = label;
       btnResultsAgain.disabled = false;
     }
+    const btnResultsMenu = $('btnResultsMenu');
+    if (btnResultsMenu) btnResultsMenu.textContent = t('leave');
+    if ($('btnMenu')) $('btnMenu').textContent = t('leave');
   }
 
   function showBanner(text, cls) {
@@ -3223,13 +3229,7 @@
   }
 
   function updateRematchHint() {
-    const readyN = roster.filter(p => p.ready).length;
-    const n = roster.length;
-    let text;
-    if (n && readyN >= n) text = t('rematchStart');
-    else if (roster.find(p => p.id === myId)?.ready) text = t('rematchWait', {ready: readyN, n});
-    else if (readyN) text = t('rematchPartial', {ready: readyN, n});
-    else text = t('rematchAll');
+    const text = mode === 'solo' ? '' : t('playAgainHint');
     const hint = $('rematchHint');
     if (hint) hint.textContent = text;
     const resultsHint = $('resultsHint');
@@ -3245,7 +3245,22 @@
       startSoloMatch(playMode);
       return;
     }
-    // Versus: return to the same session lobby (Peer stays open).
+    requestReturnToLobby();
+  }
+
+  /** Host pulls everyone back to lobby; guests may request and host echoes. */
+  function requestReturnToLobby() {
+    if (mode === 'host') {
+      broadcast({t: 'lobby', from: myId});
+      returnToLobbySession();
+      return;
+    }
+    if (mode === 'guest') {
+      netSend({t: 'lobby', from: myId});
+      // Soft-return immediately; host echo is idempotent for other peers.
+      returnToLobbySession();
+      return;
+    }
     returnToLobbySession();
   }
 
@@ -3342,11 +3357,30 @@
   function updateStartButton() {
     if (!btnStart) return;
     const isHost = mode === 'host';
+    // Always reserve space for Start while hosting so enabling it cannot
+    // steal the same click that toggled Ready.
     btnStart.hidden = !isHost || matchPhase !== 'lobby';
-    if (!isHost) return;
+    if (!isHost || matchPhase !== 'lobby') {
+      if (startArmTimer) { clearTimeout(startArmTimer); startArmTimer = 0; }
+      btnStart.disabled = true;
+      return;
+    }
     const n = roster.length;
     const allReady = n > 0 && roster.every(p => p.ready && p.connected !== false);
-    btnStart.disabled = !allReady;
+    if (!allReady) {
+      if (startArmTimer) { clearTimeout(startArmTimer); startArmTimer = 0; }
+      btnStart.disabled = true;
+      return;
+    }
+    // Arm Start shortly after everyone is ready so a Ready click cannot hit Start.
+    if (btnStart.disabled && !startArmTimer) {
+      startArmTimer = setTimeout(() => {
+        startArmTimer = 0;
+        if (mode !== 'host' || matchPhase !== 'lobby') return;
+        const ok = roster.length > 0 && roster.every(p => p.ready && p.connected !== false);
+        btnStart.disabled = !ok;
+      }, 400);
+    }
   }
 
   function updateConnQualityUI() {
@@ -4535,9 +4569,17 @@
       }
       return;
     }
+    if (data.t === 'lobby') {
+      // Anyone can request; host fans out so the whole session returns together.
+      broadcast({t: 'lobby', from: myId});
+      returnToLobbySession();
+      return;
+    }
     if (data.t === 'rematch') {
-      // Legacy: treat as request to return to lobby session.
-      if (matchPhase === 'post') returnToLobbySession();
+      if (matchPhase === 'post') {
+        broadcast({t: 'lobby', from: myId});
+        returnToLobbySession();
+      }
     }
   }
 
@@ -4667,6 +4709,10 @@
         show(netPanel);
         $('netStatus').textContent = t('hostEndedSession');
       }
+      return;
+    }
+    if (data.t === 'lobby') {
+      returnToLobbySession();
       return;
     }
     if (data.t === 'win') {
@@ -5217,7 +5263,12 @@
   $('btnLobbyLeave').onclick = menuClick(() => leaveSession());
   $('btnNetGo').onclick = menuClick(joinRoom);
   $('btnReady').onclick = menuClick(toggleReady);
-  if (btnStart) btnStart.onclick = menuClick(() => tryHostStart());
+  if (btnStart) {
+    btnStart.onclick = menuClick(() => {
+      if (btnStart.disabled || matchPhase !== 'lobby' || mode !== 'host') return;
+      tryHostStart();
+    });
+  }
   function hostSettingChanged() {
     if (mode !== 'host' || matchPhase !== 'lobby') return;
     // Changing settings clears ready so nobody starts on stale rules.

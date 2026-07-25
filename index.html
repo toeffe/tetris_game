@@ -135,8 +135,8 @@
     <h2 class="settings-title" id="resultsTitle">Results</h2>
     <ul class="results-stats" id="resultsStats"></ul>
     <p id="resultsHint" class="hint rematch-hint"></p>
-    <button id="btnResultsAgain" type="button" data-i18n="backToLobby">Back to lobby</button>
-    <button id="btnResultsMenu" class="secondary" type="button" data-i18n="leaveSession">Leave session</button>
+    <button id="btnResultsAgain" type="button" data-i18n="playAgain">Play again</button>
+    <button id="btnResultsMenu" class="secondary" type="button" data-i18n="leave">Leave</button>
   </div>
 
   <div id="netPanel" class="panel stone-tablet" hidden>
@@ -205,15 +205,15 @@
       </select>
     </label>
     <button id="btnReady" type="button" data-i18n="ready">Ready</button>
-    <button id="btnStart" type="button" hidden data-i18n="startMatch">Start</button>
-    <button id="btnLobbyLeave" class="secondary" type="button" data-i18n="leaveSession">Leave session</button>
+    <button id="btnStart" type="button" hidden disabled data-i18n="startMatch">Start</button>
+    <button id="btnLobbyLeave" class="secondary" type="button" data-i18n="leave">Leave</button>
   </div>
 
   <div id="game" hidden>
     <div id="boards" class="boards"></div>
     <p class="hint" id="ctrlHint"></p>
-    <button id="btnAgain" class="secondary" type="button" hidden data-i18n="backToLobby">Back to lobby</button>
-    <button id="btnMenu" class="secondary" type="button" data-i18n="leaveSession">Leave session</button>
+    <button id="btnAgain" class="secondary" type="button" hidden data-i18n="playAgain">Play again</button>
+    <button id="btnMenu" class="secondary" type="button" data-i18n="leave">Leave</button>
 
     <div id="pads" class="pads">
       <div class="pad" data-who="0">
