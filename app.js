@@ -297,6 +297,7 @@
       bindListening: 'Press a key…',
       paused: 'Paused',
       pausedBy: 'Paused by {name}',
+      pausedWait: 'Waiting for {name} to resume',
       resume: 'Resume',
       gameOver: 'Game over',
       results: 'Results',
@@ -485,6 +486,7 @@
       bindListening: 'Tryk på en tast…',
       paused: 'Pauset',
       pausedBy: 'Pauset af {name}',
+      pausedWait: 'Venter på at {name} fortsætter',
       resume: 'Fortsæt',
       gameOver: 'Spillet er slut',
       results: 'Resultat',
@@ -2122,12 +2124,17 @@
   function updatePauseLabels() {
     const title = $('pauseTitle');
     const hint = $('pauseHint');
+    const btnResume = $('btnResume');
+    const btnPauseSettings = $('btnPauseSettings');
+    const isOwner = !pausedById || pausedById === myId || isSoloMatch();
     if (!title) return;
     if (paused && pausedById && !isSoloMatch()) {
       title.textContent = t('paused');
       if (hint) {
         hint.hidden = false;
-        hint.textContent = t('pausedBy', {name: pauseDisplayName(pausedById)});
+        hint.textContent = isOwner
+          ? t('pausedBy', {name: pauseDisplayName(pausedById)})
+          : t('pausedWait', {name: pauseDisplayName(pausedById)});
       }
     } else {
       title.textContent = t('paused');
@@ -2136,6 +2143,17 @@
         hint.textContent = '';
       }
     }
+    if (btnResume) {
+      btnResume.hidden = !isOwner;
+      btnResume.disabled = !isOwner;
+    }
+    if (btnPauseSettings) btnPauseSettings.hidden = !isOwner;
+  }
+
+  function canResumePause() {
+    if (!paused) return false;
+    if (isSoloMatch() || mode === 'solo') return true;
+    return !!pausedById && pausedById === myId;
   }
 
   /** Apply pause/resume locally. Network sync is separate via requestMatchPause. */
@@ -2143,7 +2161,7 @@
     if (matchPhase !== 'playing' || ended) return;
     if (on) {
       if (paused) {
-        pausedById = fromId || pausedById || myId;
+        // Already paused — keep original owner; ignore competing pause claims.
         updatePauseLabels();
         return;
       }
@@ -2159,6 +2177,8 @@
       return;
     }
     if (!paused) return;
+    // Only the player who paused (or a cleared owner) may resume.
+    if (pausedById && fromId && fromId !== pausedById) return;
     paused = false;
     pausedById = null;
     hide($('pause'));
@@ -2171,6 +2191,8 @@
   }
 
   function requestMatchPause(on) {
+    if (!on && !canResumePause()) return;
+    if (on && paused) return;
     const msg = {t: 'pause', on: !!on, from: myId};
     if (mode === 'host') {
       applyMatchPause(!!on, myId);
@@ -2178,7 +2200,6 @@
       return;
     }
     if (guestConn) {
-      // Optimistic local apply; host echo keeps peers in sync
       applyMatchPause(!!on, myId);
       sendTo(guestConn, msg);
     } else {
@@ -2193,17 +2214,21 @@
   }
 
   function resumeGame() {
-    if (!paused) return;
+    if (!canResumePause()) return;
     requestMatchPause(false);
   }
 
   function togglePause() {
-    if (paused) resumeGame();
-    else pauseGame();
+    if (paused) {
+      if (canResumePause()) resumeGame();
+      return;
+    }
+    pauseGame();
   }
 
   function quitFromPause() {
-    if (paused && matchPhase === 'playing') requestMatchPause(false);
+    // Only the pauser clears the pause for the room; others just leave.
+    if (paused && matchPhase === 'playing' && canResumePause()) requestMatchPause(false);
     if (mode === 'host' || mode === 'guest') leaveSession();
     else showMenu();
   }
@@ -4550,8 +4575,11 @@
       return;
     }
     if (data.t === 'pause') {
-      applyMatchPause(!!data.on, data.from || fromId);
-      broadcast({t: 'pause', on: !!data.on, from: data.from || fromId}, fromId);
+      const from = data.from || fromId;
+      if (!data.on && pausedById && from !== pausedById) return; // only owner may resume
+      if (data.on && paused) return; // already paused — ignore
+      applyMatchPause(!!data.on, from);
+      broadcast({t: 'pause', on: !!data.on, from}, fromId);
       return;
     }
     if (data.t === 'leave') {
@@ -4695,7 +4723,10 @@
       return;
     }
     if (data.t === 'pause') {
-      applyMatchPause(!!data.on, data.from);
+      const from = data.from;
+      if (!data.on && pausedById && from && from !== pausedById) return;
+      if (data.on && paused) return;
+      applyMatchPause(!!data.on, from);
       return;
     }
     if (data.t === 'leave') {
