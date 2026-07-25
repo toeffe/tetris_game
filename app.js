@@ -195,7 +195,7 @@
       startMatch: 'Start',
       leaveSession: 'Leave session',
       backToLobby: 'Back to lobby',
-      playAgainHint: 'Play again returns everyone to the lobby.',
+      playAgainHint: 'Everyone must click Play again — same settings, new match.',
       lobbyWaitingStart: 'All ready — press Start',
       lobbyNeedReady: 'Ready up to play',
       lobbyHostStart: 'Waiting for host to Start',
@@ -207,6 +207,7 @@
       reconnectingPeer: 'Waiting for {name} ({s}s)…',
       peerForfeit: '{name} forfeited',
       hostEndedSession: 'Host ended the session.',
+      lobbyLinkHint: 'Room {code} — open Join game to enter.',
       peerLeftLobby: '{name} left the lobby',
       joinRetry: 'Retry',
       offline: 'Offline',
@@ -384,7 +385,7 @@
       startMatch: 'Start',
       leaveSession: 'Forlad session',
       backToLobby: 'Tilbage til lobby',
-      playAgainHint: 'Spil igen sender alle tilbage til lobbyen.',
+      playAgainHint: 'Alle skal trykke Spil igen — samme indstillinger, ny kamp.',
       lobbyWaitingStart: 'Alle klar — tryk Start',
       lobbyNeedReady: 'Tryk Klar for at spille',
       lobbyHostStart: 'Venter på at værten starter',
@@ -396,6 +397,7 @@
       reconnectingPeer: 'Venter på {name} ({s}s)…',
       peerForfeit: '{name} opgav',
       hostEndedSession: 'Værten afsluttede sessionen.',
+      lobbyLinkHint: 'Rum {code} — åbn Tilslut for at komme ind.',
       peerLeftLobby: '{name} forlod lobbyen',
       joinRetry: 'Prøv igen',
       offline: 'Offline',
@@ -1007,6 +1009,8 @@
   const POST_HB_TIMEOUT_MS = 4000;
   let postHbTimer = 0;
   let postLastSeen = new Map(); // peerId -> performance.now()
+  // Share-link code from ?lobby= — prefill Join only; never auto-connect on refresh.
+  let pendingLobbyInvite = null;
 
   function rotateCW(m) {
     const n = m.length, out = Array.from({length:n}, () => Array(n).fill(0));
@@ -3391,11 +3395,35 @@
   }
 
   function updateRematchHint() {
-    const text = mode === 'solo' ? '' : t('playAgainHint');
+    let text = '';
+    if (mode === 'solo') {
+      text = '';
+    } else if (matchPhase === 'post') {
+      const present = roster.filter(p => p.connected !== false);
+      const n = present.length;
+      const readyN = present.filter(p => p.ready).length;
+      const me = roster.find(p => p.id === myId);
+      if (n > 0 && readyN >= n) text = t('rematchStart');
+      else if (me && me.ready) text = t('rematchWait', {ready: readyN, n});
+      else text = t('rematchAll');
+    } else {
+      text = t('playAgainHint');
+    }
     const hint = $('rematchHint');
     if (hint) hint.textContent = text;
     const resultsHint = $('resultsHint');
     if (resultsHint) resultsHint.textContent = text;
+  }
+
+  function setRematchReadyLocal(ready) {
+    const label = ready ? t('ready') : t('playAgain');
+    btnAgain.disabled = !!ready;
+    btnAgain.textContent = label;
+    const btnResultsAgain = $('btnResultsAgain');
+    if (btnResultsAgain) {
+      btnResultsAgain.disabled = !!ready;
+      btnResultsAgain.textContent = label;
+    }
   }
 
   function rematch() {
@@ -3407,7 +3435,17 @@
       startSoloMatch(playMode);
       return;
     }
-    requestReturnToLobby();
+    if (matchPhase !== 'post' && !ended) return;
+    const me = roster.find(p => p.id === myId);
+    if (!me || me.ready) return;
+    me.ready = true;
+    setRematchReadyLocal(true);
+    netSend({t: 'rematch', from: myId});
+    updateRematchHint();
+    if (mode === 'host') {
+      broadcastRoster();
+      tryHostStart();
+    }
   }
 
   /** Host pulls everyone back to lobby; guests may request and host echoes. */
@@ -3747,6 +3785,9 @@
     postLastSeen.delete(peerId);
     roster = roster.filter(p => p.id !== peerId);
     broadcastRoster();
+    updateRematchHint();
+    // Remaining players who already clicked Play again can start without the leaver.
+    tryHostStart();
     return true;
   }
 
@@ -4465,7 +4506,8 @@
 
   function tryHostStart() {
     if (mode !== 'host') return;
-    if (matchPhase !== 'lobby') return;
+    // Lobby Start button, or post-match when everyone clicked Play again.
+    if (matchPhase !== 'lobby' && matchPhase !== 'post') return;
     if (pendingStart) return;
     if (roster.length < 1) return;
     if (!roster.every(p => p.ready && p.connected !== false)) return;
@@ -4549,6 +4591,9 @@
     const mount = () => {
       hide(lobbyEl);
       hide(netPanel);
+      hideOverlayPanels();
+      hide(banner);
+      hide(btnAgain);
       lobbyEl.classList.remove('panel-exit');
       show(gameEl);
       setPlayLayout(true);
@@ -4628,9 +4673,34 @@
         connections.delete(fromId);
         return;
       }
-      // Post-match: pull session back to lobby so the peer can sit with everyone.
+      // Post-match rematch voting: let peers rejoin results without forcing lobby.
       if (matchPhase === 'post') {
-        returnToLobbySession();
+        const existingPost = roster.find(p => p.id === fromId);
+        if (!existingPost) {
+          if (roster.length >= MAX_PLAYERS) {
+            sendTo(connections.get(fromId), {t: 'reject', reason: 'room_full'});
+            connections.get(fromId)?.close();
+            connections.delete(fromId);
+            return;
+          }
+          roster.push({
+            id: fromId,
+            name: sanitizeName(data.name),
+            ready: false,
+            alive: true,
+            connected: true,
+          });
+        } else {
+          existingPost.name = sanitizeName(data.name);
+          existingPost.connected = true;
+          existingPost.ready = false;
+        }
+        postLastSeen.set(fromId, performance.now());
+        sendTo(connections.get(fromId), {t: 'welcome', id: fromId, code: roomCode, hostId: myId});
+        sendTo(connections.get(fromId), settingsPayload());
+        broadcastRoster();
+        updateRematchHint();
+        return;
       }
       if (matchPhase !== 'lobby') {
         sendTo(connections.get(fromId), {t: 'reject', reason: 'match_started'});
@@ -4732,6 +4802,10 @@
       if (matchPhase === 'playing' || matchPhase === 'countdown') {
         markDead(fromId);
         checkWinner();
+      } else if (matchPhase === 'post') {
+        updateRematchHint();
+        broadcastRoster();
+        tryHostStart();
       } else {
         if ($('lobbyStatus')) $('lobbyStatus').textContent = t('peerLeftLobby', {name: leftName});
         broadcastRoster();
@@ -4745,10 +4819,12 @@
       return;
     }
     if (data.t === 'rematch') {
-      if (matchPhase === 'post') {
-        broadcast({t: 'lobby', from: myId});
-        returnToLobbySession();
-      }
+      if (matchPhase !== 'post') return;
+      const p = roster.find(x => x.id === fromId);
+      if (p) p.ready = true;
+      broadcastRoster();
+      updateRematchHint();
+      tryHostStart();
     }
   }
 
@@ -4777,15 +4853,17 @@
       myId = data.id;
       roomCode = data.code || roomCode;
       hostPlayerId = data.hostId || hostPlayerId || roomCode;
-      setLobbyUrl(roomCode);
+      setLobbyUrl(null);
       storageSet(SESSION_HOST_KEY, '');
+      pendingLobbyInvite = null;
       migratePhase = null;
       migrateAttempt = 0;
       clearMigrateTimer();
       if (matchPhase === 'lobby' || matchPhase === 'idle' || matchPhase === 'connecting') {
         showLobby();
       } else if (matchPhase === 'post') {
-        returnToLobbySession();
+        // Stay on results for rematch voting; do not soft-return to lobby.
+        updateRematchHint();
       }
       return;
     }
@@ -4804,6 +4882,11 @@
       if (matchPhase === 'lobby' || matchPhase === 'idle' || matchPhase === 'connecting') {
         matchPhase = 'lobby';
         showLobby();
+      }
+      if (matchPhase === 'post') {
+        const me = roster.find(p => p.id === myId);
+        setRematchReadyLocal(!!(me && me.ready));
+        updateRematchHint();
       }
       renderRoster();
       return;
@@ -5012,7 +5095,8 @@
     hostPlayerId = code;
     if (!LOBBY_MATCH_MODES.includes(playMode)) playMode = 'versus';
     storageSet(SESSION_HOST_KEY, code);
-    setLobbyUrl(code);
+    // Keep the address bar clean; share links come from the Copy button.
+    setLobbyUrl(null);
     const name = setPlayerName(getPlayerName());
     roster = [{id: myId, name, ready: false, alive: true, connected: true}];
     matchPhase = 'lobby';
@@ -5026,7 +5110,8 @@
     hide($('btnCopy'));
     show($('netIn'));
     show($('btnNetGo'));
-    $('netIn').value = '';
+    const invite = pendingLobbyInvite || '';
+    $('netIn').value = invite;
     $('netStatus').textContent = '';
     setTimeout(() => $('netIn').focus(), 50);
   }
@@ -5073,7 +5158,7 @@
     mode = 'guest';
     matchPhase = 'connecting';
     roomCode = code;
-    setLobbyUrl(code);
+    setLobbyUrl(null);
     storageSet(SESSION_HOST_KEY, '');
     $('btnNetGo').disabled = true;
     $('netStatus').textContent = t('connecting');
@@ -5162,8 +5247,8 @@
       mode = 'guest';
       matchPhase = 'connecting';
       $('btnNetGo').disabled = false;
+      if (preferredCode) pendingLobbyInvite = preferredCode;
       showJoinUI();
-      if (preferredCode && $('netIn')) $('netIn').value = preferredCode;
     }
   }
 
@@ -5529,17 +5614,12 @@
   }
   applyI18n();
 
-  // Resume lobby from ?lobby=CODE. Host peer id === lobby code (stable session id).
+  // ?lobby=CODE is for share links only — never auto-resume a Peer session on refresh.
   (function bootLobbyFromUrl() {
     const code = getLobbyUrlCode();
     if (!code) return;
-    const wasHost = storageGet(SESSION_HOST_KEY) === code;
-    setTimeout(() => {
-      if (wasHost) openNetUI('host', code);
-      else {
-        openNetUI('guest', code);
-        joinRoom();
-      }
-    }, 50);
+    setLobbyUrl(null);
+    pendingLobbyInvite = code;
+    setTimeout(() => flashMenuStatus(t('lobbyLinkHint', {code})), 80);
   })();
 })();

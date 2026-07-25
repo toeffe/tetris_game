@@ -1476,11 +1476,20 @@ canvas{
 #banner.win{color:var(--gold);}
 #banner.lose{color:#e06060;border-color:var(--crimson);}
 .rematch-hint{
-  margin-top:12px;
-  font-family:var(--font-body);
-  font-size:.35em;
-  letter-spacing:.12em;
-  color:var(--muted);
+  margin:14px 0 8px;
+  font-family:var(--font-display);
+  font-size:clamp(1.05rem, 3.4vw, 1.35rem);
+  font-weight:600;
+  letter-spacing:.1em;
+  line-height:1.35;
+  color:var(--gold);
+  text-transform:uppercase;
+}
+#banner .rematch-hint{
+  /* rem — never inherit the banner's huge display size via em */
+  font-size:clamp(.95rem, 2.8vw, 1.15rem);
+  margin-top:14px;
+  color:var(--parchment);
 }
 
 .pads{
