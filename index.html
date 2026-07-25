@@ -36,13 +36,34 @@
   <div id="menu" class="panel stone-tablet">
     <span class="panel-corners" aria-hidden="true"></span>
     <input id="menuName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" data-i18n-aria="yourName" placeholder="Name" aria-label="Your name">
-    <button id="btnHost" data-i18n="hostGame">Host game</button>
+    <h3 class="settings-section" data-i18n="modesTitle">Solo modes</h3>
+    <div id="modePicker" class="mode-picker" role="radiogroup" aria-label="Game mode">
+      <button type="button" class="mode-btn" data-mode="marathon" aria-pressed="true">
+        <span class="mode-name" data-i18n="modeMarathon">Marathon</span>
+        <span class="mode-desc" data-i18n="modeMarathonDesc">Endless · rising speed</span>
+      </button>
+      <button type="button" class="mode-btn" data-mode="sprint" aria-pressed="false">
+        <span class="mode-name" data-i18n="modeSprint">Sprint</span>
+        <span class="mode-desc" data-i18n="modeSprintDesc">Clear 40 lines</span>
+      </button>
+      <button type="button" class="mode-btn" data-mode="ultra" aria-pressed="false">
+        <span class="mode-name" data-i18n="modeUltra">Ultra</span>
+        <span class="mode-desc" data-i18n="modeUltraDesc">2 min · max score</span>
+      </button>
+      <button type="button" class="mode-btn" data-mode="zen" aria-pressed="false">
+        <span class="mode-name" data-i18n="modeZen">Zen</span>
+        <span class="mode-desc" data-i18n="modeZenDesc">Practice · no top-out</span>
+      </button>
+    </div>
+    <button id="btnSolo" type="button" data-i18n="playSolo">Play</button>
+    <h3 class="settings-section" data-i18n="versusTitle">Versus</h3>
+    <button id="btnHost" class="secondary" data-i18n="hostGame">Host game</button>
     <button id="btnJoin" class="secondary" data-i18n="joinGame">Join game</button>
     <button id="btnSettings" class="secondary" type="button" data-i18n="settings">Settings</button>
-    <p class="hint" data-i18n="menuHint">Up to 8 players.</p>
+    <p class="hint" data-i18n="menuHint">Up to 8 players in versus. Solo needs no connection.</p>
   </div>
 
-  <div id="settings" class="panel stone-tablet settings-panel" hidden>
+  <div id="settings" class="panel stone-tablet settings-panel overlay-panel" hidden>
     <span class="panel-corners" aria-hidden="true"></span>
     <h2 class="settings-title" data-i18n="settingsTitle">Settings</h2>
 
@@ -102,7 +123,8 @@
 
   <div id="pause" class="panel stone-tablet overlay-panel" hidden>
     <span class="panel-corners" aria-hidden="true"></span>
-    <h2 class="settings-title" data-i18n="paused">Paused</h2>
+    <h2 class="settings-title" id="pauseTitle" data-i18n="paused">Paused</h2>
+    <p id="pauseHint" class="hint" hidden></p>
     <button id="btnResume" type="button" data-i18n="resume">Resume</button>
     <button id="btnPauseSettings" class="secondary" type="button" data-i18n="settings">Settings</button>
     <button id="btnPauseMenu" class="secondary" type="button" data-i18n="menu">Menu</button>
@@ -135,6 +157,7 @@
     <input id="lobbyName" class="name-input" type="text" maxlength="12" autocomplete="nickname" spellcheck="false" data-i18n-placeholder="namePh" data-i18n-aria="yourName" placeholder="Name" aria-label="Your name">
     <ul id="rosterList" class="roster"></ul>
     <p id="lobbyStatus" class="hint"></p>
+    <p id="lobbyMode" class="hint lobby-mode" data-i18n="versusLobby">Versus battle</p>
     <label id="dropSpeedRow" class="setting-row" hidden>
       <span data-i18n="dropSpeed">Drop speed</span>
       <select id="selDropSpeed">

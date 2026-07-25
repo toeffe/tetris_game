@@ -85,7 +85,11 @@
   const COLORBLIND_KEY = 'vibetrisimo-colorblind';
   const GRID_KEY = 'vibetrisimo-grid';
   const BINDS_KEY = 'vibetrisimo-binds';
+  const MODE_KEY = 'vibetrisimo-mode';
   const DEFAULT_GRID_OPACITY = 16;
+  const SPRINT_LINES = 40;
+  const ULTRA_MS = 120000;
+  const SOLO_MODES = ['marathon', 'sprint', 'ultra', 'zen'];
   const CLEAR_FLASH_MS = 220;
   const CLEAR_COLLAPSE_MS = 280;
   const PIECE_LERP_MS = 85; // higher = smoother / more visible glide
@@ -152,7 +156,28 @@
       namePh: 'Name',
       hostGame: 'Host game',
       joinGame: 'Join game',
-      menuHint: 'Up to 8 players.',
+      menuHint: 'Up to 8 players in versus. Solo needs no connection.',
+      modesTitle: 'Solo modes',
+      versusTitle: 'Versus',
+      playSolo: 'Play',
+      modeMarathon: 'Marathon',
+      modeMarathonDesc: 'Endless · rising speed',
+      modeSprint: 'Sprint',
+      modeSprintDesc: 'Clear 40 lines',
+      modeUltra: 'Ultra',
+      modeUltraDesc: '2 min · max score',
+      modeZen: 'Zen',
+      modeZenDesc: 'Practice · no top-out',
+      versusLobby: 'Versus battle',
+      sprintGoal: '{n}/40 lines',
+      ultraLeft: '{t} left',
+      sprintClear: '40 LINES!',
+      ultraDone: 'TIME!',
+      zenReset: 'Board cleared',
+      peerLeft: '{name} left the match',
+      connectingHost: 'Opening room…',
+      waitingPeers: 'Share the code — waiting for players',
+      peerJoined: '{name} joined',
       copyCode: 'Copy code',
       codePh: 'Code',
       join: 'Join',
@@ -247,6 +272,7 @@
       bindPause: 'Pause',
       bindListening: 'Press a key…',
       paused: 'Paused',
+      pausedBy: 'Paused by {name}',
       resume: 'Resume',
       gameOver: 'Game over',
       results: 'Results',
@@ -297,7 +323,28 @@
       namePh: 'Navn',
       hostGame: 'Opret spil',
       joinGame: 'Tilslut spil',
-      menuHint: 'Op til 8 spillere.',
+      menuHint: 'Op til 8 spillere i versus. Solo kræver ingen forbindelse.',
+      modesTitle: 'Solo-tilstande',
+      versusTitle: 'Versus',
+      playSolo: 'Spil',
+      modeMarathon: 'Maraton',
+      modeMarathonDesc: 'Uendeligt · stigende fart',
+      modeSprint: 'Sprint',
+      modeSprintDesc: 'Ryd 40 linjer',
+      modeUltra: 'Ultra',
+      modeUltraDesc: '2 min · max point',
+      modeZen: 'Zen',
+      modeZenDesc: 'Øv · intet top-out',
+      versusLobby: 'Versus-kamp',
+      sprintGoal: '{n}/40 linjer',
+      ultraLeft: '{t} tilbage',
+      sprintClear: '40 LINJER!',
+      ultraDone: 'TIDEN ER GÅET!',
+      zenReset: 'Bræt nulstillet',
+      peerLeft: '{name} forlod kampen',
+      connectingHost: 'Åbner rum…',
+      waitingPeers: 'Del koden — venter på spillere',
+      peerJoined: '{name} tilsluttede',
       copyCode: 'Kopiér kode',
       codePh: 'Kode',
       join: 'Tilslut',
@@ -392,6 +439,7 @@
       bindPause: 'Pause',
       bindListening: 'Tryk på en tast…',
       paused: 'Pauset',
+      pausedBy: 'Pauset af {name}',
       resume: 'Fortsæt',
       gameOver: 'Spillet er slut',
       results: 'Resultat',
@@ -753,6 +801,7 @@
     }
     if ($('ctrlHint') && matchPhase === 'playing') $('ctrlHint').textContent = t('ctrlHint');
     if (typeof renderBindList === 'function') renderBindList();
+    if (typeof updatePauseLabels === 'function' && paused) updatePauseLabels();
     if ($('netLabel') && !$('netPanel').hidden && mode === 'guest') {
       $('netLabel').textContent = t('enterCode');
     }
@@ -814,11 +863,13 @@
     }
   } catch (_) {}
 
-  let mode = null; // 'host' | 'guest'
+  let mode = null; // 'host' | 'guest' | 'solo'
+  let playMode = 'marathon'; // marathon | sprint | ultra | zen | versus
   let boards = [];
   let boardById = new Map();
   let running = false, ended = false, eliminated = false;
   let paused = false;
+  let pausedById = null;
   let settingsFrom = 'menu'; // 'menu' | 'pause'
   let matchPhase = 'idle'; // idle | lobby | countdown | playing | post
   let resultsAnimToken = 0;
@@ -1702,6 +1753,7 @@
       if (!this.canPlay()) return;
       this.elapsed += dt;
       if (this.updateSpeed()) this.paintHud();
+      else if (playMode === 'ultra') this.paintHud();
       this.acc += dt;
       if (this.acc >= this.dropMs) {
         this.acc = 0;
@@ -1718,11 +1770,13 @@
       } else {
         this.lockAcc = 0;
       }
+      if (this.live) checkSoloObjectives(this);
     }
 
     updateSpeed() {
       const lineLevel = 1 + ((this.lines / 10) | 0);
-      const timeLevel = timeRampEnabled ? 1 + ((this.elapsed / TIME_LEVEL_MS) | 0) : 1;
+      const rampOn = timeRampEnabled && playMode !== 'zen';
+      const timeLevel = rampOn ? 1 + ((this.elapsed / TIME_LEVEL_MS) | 0) : 1;
       const level = Math.max(lineLevel, timeLevel);
       const changed = level !== this.level;
       this.level = level;
@@ -1747,7 +1801,29 @@
     paintHud() {
       if (this.els.score) this.els.score.textContent = this.score;
       if (this.els.level) this.els.level.textContent = this.level;
-      if (this.els.lines) this.els.lines.textContent = this.lines;
+      if (this.els.lines) {
+        if (playMode === 'sprint') this.els.lines.textContent = Math.min(this.lines, SPRINT_LINES) + '/' + SPRINT_LINES;
+        else this.els.lines.textContent = this.lines;
+      }
+      if (this.els.objective) {
+        if (playMode === 'sprint') {
+          this.els.objective.hidden = false;
+          this.els.objective.textContent = t('sprintGoal', {n: Math.min(this.lines, SPRINT_LINES)});
+        } else if (playMode === 'ultra') {
+          this.els.objective.hidden = false;
+          const left = Math.max(0, ULTRA_MS - this.elapsed);
+          this.els.objective.textContent = t('ultraLeft', {t: formatMatchTime(left)});
+        } else if (playMode === 'zen') {
+          this.els.objective.hidden = false;
+          this.els.objective.textContent = t('modeZen');
+        } else if (playMode === 'marathon') {
+          this.els.objective.hidden = false;
+          this.els.objective.textContent = t('modeMarathon');
+        } else {
+          this.els.objective.hidden = true;
+          this.els.objective.textContent = '';
+        }
+      }
       if (this.nextCtx) drawNextQueue(this.nextCtx, this.queue, this.nextSize);
       if (this.holdCtx) drawMini(this.holdCtx, this.holdType, this.nextSize);
       if (this.els.powerWrap) this.els.powerWrap.hidden = !powerUpsEnabled;
@@ -1980,35 +2056,104 @@
     if (pauseEl) hide(pauseEl);
     if (resultsEl) hide(resultsEl);
     paused = false;
+    pausedById = null;
   }
 
   function isSoloMatch() {
     return roster.length <= 1;
   }
 
-  function pauseGame() {
-    if (matchPhase !== 'playing' || ended || eliminated) return;
-    if (paused) return;
-    paused = true;
-    resetHeldKeys();
-    hide($('results'));
-    show($('pause'));
+  function pauseDisplayName(id) {
+    const p = roster.find(x => x.id === id);
+    return (p && p.name) || t('defaultName');
+  }
+
+  function updatePauseLabels() {
+    const title = $('pauseTitle');
+    const hint = $('pauseHint');
+    if (!title) return;
+    if (paused && pausedById && !isSoloMatch()) {
+      title.textContent = t('paused');
+      if (hint) {
+        hint.hidden = false;
+        hint.textContent = t('pausedBy', {name: pauseDisplayName(pausedById)});
+      }
+    } else {
+      title.textContent = t('paused');
+      if (hint) {
+        hint.hidden = true;
+        hint.textContent = '';
+      }
+    }
+  }
+
+  /** Apply pause/resume locally. Network sync is separate via requestMatchPause. */
+  function applyMatchPause(on, fromId) {
+    if (matchPhase !== 'playing' || ended) return;
+    if (on) {
+      if (paused) {
+        pausedById = fromId || pausedById || myId;
+        updatePauseLabels();
+        return;
+      }
+      paused = true;
+      pausedById = fromId || myId;
+      resetHeldKeys();
+      hide($('results'));
+      updatePauseLabels();
+      const settingsEl = $('settings');
+      const settingsOpen = settingsEl && !settingsEl.hidden && settingsFrom === 'pause';
+      if (!settingsOpen) show($('pause'));
+      sfx('menu');
+      return;
+    }
+    if (!paused) return;
+    paused = false;
+    pausedById = null;
+    hide($('pause'));
+    const settingsEl = $('settings');
+    if (settingsEl && settingsFrom === 'pause') hide(settingsEl);
+    settingsFrom = 'menu';
+    updatePauseLabels();
+    last = performance.now();
     sfx('menu');
+  }
+
+  function requestMatchPause(on) {
+    const msg = {t: 'pause', on: !!on, from: myId};
+    if (mode === 'host') {
+      applyMatchPause(!!on, myId);
+      broadcast(msg);
+      return;
+    }
+    if (guestConn) {
+      // Optimistic local apply; host echo keeps peers in sync
+      applyMatchPause(!!on, myId);
+      sendTo(guestConn, msg);
+    } else {
+      applyMatchPause(!!on, myId);
+    }
+  }
+
+  function pauseGame() {
+    if (matchPhase !== 'playing' || ended) return;
+    if (paused) return;
+    requestMatchPause(true);
   }
 
   function resumeGame() {
     if (!paused) return;
-    paused = false;
-    hide($('pause'));
-    const settingsEl = $('settings');
-    if (settingsEl && settingsFrom === 'pause') hide(settingsEl);
-    last = performance.now();
-    sfx('menu');
+    requestMatchPause(false);
   }
 
   function togglePause() {
     if (paused) resumeGame();
     else pauseGame();
+  }
+
+  function quitFromPause() {
+    if (paused && matchPhase === 'playing') requestMatchPause(false);
+    showMenu();
   }
 
   function showResults(titleText) {
@@ -2251,6 +2396,9 @@
     const score = document.createElement('div');
     score.className = 'score';
     score.textContent = '0';
+    const objective = document.createElement('div');
+    objective.className = 'mode-objective';
+    objective.hidden = true;
     const meta = document.createElement('div');
     meta.className = 'meta';
     meta.innerHTML = t('meta', {lv: '<span class="lv">1</span>', lines: '<span class="ln">0</span>'});
@@ -2277,7 +2425,7 @@
       nextAlcove.className = 'alcove alcove-next';
       const plaque = document.createElement('div');
       plaque.className = 'stat-plaque';
-      plaque.append(score, meta, over);
+      plaque.append(score, objective, meta, over);
       nextAlcove.append(miniLabel, next, plaque);
 
       shelf.append(holdAlcove, wellFrame, nextAlcove);
@@ -2292,7 +2440,7 @@
       row.appendChild(canvas);
       const side = document.createElement('div');
       side.className = 'side';
-      side.append(miniLabel, next, score, meta, over);
+      side.append(miniLabel, next, score, objective, meta, over);
       const hud = document.createElement('div');
       hud.className = 'hud';
       hud.append(holdSide, side);
@@ -2311,6 +2459,7 @@
       els: {
         root: box,
         score,
+        objective,
         level: meta.querySelector('.lv'),
         lines: meta.querySelector('.ln'),
         over,
@@ -2380,10 +2529,15 @@
     });
     const n = roster.length;
     const readyN = roster.filter(p => p.ready).length;
-    let status = t('rosterStatus', {n, max: MAX_PLAYERS, ready: readyN});
-    if (n < 1) status += t('needTwo');
-    else if (readyN < n) status += t('waitReady');
-    else status += t('startingSoon');
+    let status;
+    if (mode === 'host' && n === 1) {
+      status = t('waitingPeers');
+    } else {
+      status = t('rosterStatus', {n, max: MAX_PLAYERS, ready: readyN});
+      if (n < 1) status += t('needTwo');
+      else if (readyN < n) status += t('waitReady');
+      else status += t('startingSoon');
+    }
     $('lobbyStatus').textContent = status;
 
     const me = roster.find(p => p.id === myId);
@@ -2402,8 +2556,14 @@
     gameEl.classList.remove('game-entering');
     show(lobbyEl);
     matchPhase = 'lobby';
+    playMode = 'versus';
     $('lobbyCode').textContent = roomCode || '·····';
     lobbyName.value = getPlayerName();
+    const lobbyMode = $('lobbyMode');
+    if (lobbyMode) {
+      lobbyMode.hidden = false;
+      lobbyMode.textContent = t('versusLobby');
+    }
     if (mode === 'host') {
       show(speedRampRow);
       selSpeedRamp.value = timeRampEnabled ? 'on' : 'off';
@@ -2453,6 +2613,8 @@
     if (settingsEl) hide(settingsEl);
     btnAgain.disabled = false;
     btnAgain.textContent = t('playAgain');
+    if (playMode === 'versus' || !SOLO_MODES.includes(playMode)) setPlayMode(loadPlayMode());
+    else setPlayMode(playMode);
     show(menu);
     const a = audio();
     if (a) a.stopMusic(350);
@@ -2487,6 +2649,8 @@
     hide(netPanel);
     hide(lobbyEl);
     if (settingsFrom === 'pause') hide($('pause'));
+    // Stay paused while settings is open mid-match
+    if (settingsFrom === 'pause') paused = true;
     syncSettingsUI();
     show($('settings'));
   }
@@ -2559,8 +2723,8 @@
   }
 
   function armHostCountdown() {
-    if (mode !== 'host' || matchPhase !== 'countdown') return;
-    const guestIds = [...connections.keys()];
+    if ((mode !== 'host' && mode !== 'solo') || matchPhase !== 'countdown') return;
+    const guestIds = mode === 'solo' ? [] : [...connections.keys()];
     if (!guestIds.length) {
       earlyCdReady.clear();
       runHostCountdown();
@@ -2706,8 +2870,8 @@
     let dt = now - last;
     last = now;
     if (!running || matchPhase !== 'playing' || ended) return;
-    // Solo pause freezes the clock; versus pause only blocks local input.
-    if (paused && isSoloMatch()) return;
+    // Pause freezes gravity/input for everyone (synced over the net in multiplayer).
+    if (paused) return;
     // Focused: clamp spikes. Hidden: allow larger dt so throttled timers still catch up.
     const maxDt = document.hidden ? 2000 : 100;
     dt = Math.min(Math.max(0, dt), maxDt);
@@ -2818,15 +2982,67 @@
   }
 
   function onTopOut(board) {
-    if (!board.live || eliminated || ended) return;
+    if (!board.live || ended) return;
+    if (playMode === 'zen') {
+      board.over = false;
+      board.grid = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+      board.gQueue = 0;
+      board.clearAnim = null;
+      board.rowDrawY = null;
+      board.piece = null;
+      board.spawn();
+      showBoardToast(board, t('zenReset'), 'clear');
+      sfx('clear', 1);
+      board.paintHud();
+      return;
+    }
+    if (eliminated) return;
     eliminated = true;
-    if (board.els.over) board.els.over.textContent = t('eliminated');
+    if (board.els.over) board.els.over.textContent = mode === 'solo' ? t('topOut') : t('eliminated');
     markDead(board.playerId);
+    if (mode === 'solo') {
+      finishSoloRun(false);
+      return;
+    }
     netSend({t: 'over', from: board.playerId});
     showBanner(t('eliminated'), 'lose');
     sfx('gameover');
     const a = audio();
     if (a) a.stopMusic(600);
+  }
+
+  function checkSoloObjectives(board) {
+    if (mode !== 'solo' || !board || !board.live || ended || matchPhase !== 'playing') return;
+    if (playMode === 'sprint' && board.lines >= SPRINT_LINES) {
+      finishSoloRun(true, t('sprintClear'));
+      return;
+    }
+    if (playMode === 'ultra' && board.elapsed >= ULTRA_MS) {
+      board.elapsed = ULTRA_MS;
+      finishSoloRun(true, t('ultraDone'));
+    }
+  }
+
+  function finishSoloRun(won, titleOverride) {
+    if (ended) return;
+    ended = true;
+    clearCountdown();
+    matchPhase = 'post';
+    paused = false;
+    pausedById = null;
+    hide($('pause'));
+    const title = titleOverride || (won ? t('victory') : t('gameOver'));
+    showBanner(title, won ? 'win' : 'lose');
+    if (won) {
+      burstFireworks();
+      sfx('win');
+    } else {
+      sfx('gameover');
+    }
+    const a = audio();
+    if (a) a.stopMusic(700);
+    showResults(title);
+    showRematchBtn();
   }
 
   function markDead(id) {
@@ -2847,6 +3063,7 @@
     clearCountdown();
     matchPhase = 'post';
     paused = false;
+    pausedById = null;
     hide($('pause'));
     const winner = alive[0];
     if (winner) {
@@ -2878,6 +3095,7 @@
     clearCountdown();
     matchPhase = 'post';
     paused = false;
+    pausedById = null;
     hide($('pause'));
     roster.forEach(p => { p.ready = false; });
     let title;
@@ -2941,6 +3159,14 @@
   }
 
   function rematch() {
+    if (mode === 'solo') {
+      if (matchPhase !== 'post' && !ended) return;
+      hide(banner);
+      hide(btnAgain);
+      hideOverlayPanels();
+      startSoloMatch(playMode);
+      return;
+    }
     if (matchPhase !== 'post' && !ended) return;
     const me = roster.find(p => p.id === myId);
     if (!me || me.ready) return;
@@ -3210,6 +3436,10 @@
       }
       if (msg.t === 'over') {
         handleOver(msg.from);
+        return;
+      }
+      if (msg.t === 'pause') {
+        broadcast(msg);
         return;
       }
       if (msg.t === 'rematch') {
@@ -3820,7 +4050,7 @@
       hide(banner);
       hide(btnAgain);
       for (const b of boards) b.draw();
-      if (mode === 'host') {
+      if (mode === 'host' || mode === 'solo') {
         armHostCountdown();
       } else {
         netSend({t: 'cdReady'});
@@ -3876,6 +4106,9 @@
           alive: true,
         });
         roster.forEach(p => { p.ready = false; });
+        if ($('lobbyStatus')) {
+          $('lobbyStatus').textContent = t('peerJoined', {name: sanitizeName(data.name)});
+        }
       }
       sendTo(connections.get(fromId), {t: 'welcome', id: fromId, code: roomCode, hostId: myId});
       broadcastRoster();
@@ -3921,6 +4154,11 @@
     }
     if (data.t === 'over') {
       handleOver(fromId);
+      return;
+    }
+    if (data.t === 'pause') {
+      applyMatchPause(!!data.on, data.from || fromId);
+      broadcast({t: 'pause', on: !!data.on, from: data.from || fromId}, fromId);
       return;
     }
     if (data.t === 'rematch') {
@@ -4033,6 +4271,10 @@
       checkSelfWin();
       return;
     }
+    if (data.t === 'pause') {
+      applyMatchPause(!!data.on, data.from);
+      return;
+    }
     if (data.t === 'win') {
       applyWin(data.id);
     }
@@ -4062,6 +4304,12 @@
         roster.forEach(p => { p.ready = false; });
         broadcastRoster();
       } else if (matchPhase === 'playing' || matchPhase === 'countdown') {
+        const left = roster.find(p => p.id === peerId);
+        notifyPeerLeft(left && left.name);
+        if (paused && pausedById === peerId) {
+          applyMatchPause(false);
+          broadcast({t: 'pause', on: false, from: peerId});
+        }
         markDead(peerId);
         checkWinner();
       } else if (matchPhase === 'post') {
@@ -4140,9 +4388,11 @@
     roomCode = code;
     myId = code;
     hostPlayerId = code;
+    playMode = 'versus';
     const name = setPlayerName(getPlayerName());
     roster = [{id: myId, name, ready: false, alive: true}];
     showLobby();
+    if ($('lobbyStatus')) $('lobbyStatus').textContent = t('waitingPeers');
   }
 
   function showJoinUI() {
@@ -4206,13 +4456,72 @@
     });
   }
 
+  function loadPlayMode() {
+    const saved = storageGet(MODE_KEY);
+    if (SOLO_MODES.includes(saved)) return saved;
+    return 'marathon';
+  }
+
+  function setPlayMode(next) {
+    if (!SOLO_MODES.includes(next) && next !== 'versus') return;
+    playMode = next;
+    if (SOLO_MODES.includes(next)) storageSet(MODE_KEY, next);
+    document.querySelectorAll('#modePicker .mode-btn').forEach(btn => {
+      const on = btn.dataset.mode === playMode;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function applySoloModeDefaults() {
+    powerUpsEnabled = false;
+    garbageTarget = 'clockwise';
+    dropSpeed = 'normal';
+    if (playMode === 'zen') timeRampEnabled = false;
+    else timeRampEnabled = true;
+  }
+
+  function startSoloMatch(modeKey) {
+    const next = SOLO_MODES.includes(modeKey) ? modeKey : playMode;
+    setPlayMode(next);
+    closeNet();
+    mode = 'solo';
+    playMode = next;
+    myId = 'local';
+    hostPlayerId = myId;
+    roomCode = null;
+    applySoloModeDefaults();
+    ended = false;
+    eliminated = false;
+    paused = false;
+    pausedById = null;
+    const name = getPlayerName();
+    roster = [{id: myId, name, ready: true, alive: true}];
+    hide(menu);
+    hide(netPanel);
+    hide(lobbyEl);
+    hideOverlayPanels();
+    startRemoteMatch([{id: myId, name}]);
+  }
+
+  function notifyPeerLeft(name) {
+    const label = name || t('defaultName');
+    const mine = boardById.get(myId);
+    if (mine) showBoardToast(mine, t('peerLeft', {name: label}), 'hit');
+    else if ($('lobbyStatus') && !$('lobby').hidden) {
+      $('lobbyStatus').textContent = t('peerLeft', {name: label});
+    }
+  }
+
   function openNetUI(kind) {
+    playMode = 'versus';
     setPlayerName(menuName.value || getPlayerName());
     hide(menu);
     hide(lobbyEl);
     if ($('settings')) hide($('settings'));
     if (kind === 'host') {
       hide(netPanel);
+      $('netStatus') && ($('netStatus').textContent = t('connectingHost'));
       hostRoom(0);
     } else {
       show(netPanel);
@@ -4398,11 +4707,19 @@
 
   $('btnHost').onclick = menuClick(() => openNetUI('host'));
   $('btnJoin').onclick = menuClick(() => openNetUI('guest'));
+  if ($('btnSolo')) $('btnSolo').onclick = menuClick(() => startSoloMatch(playMode));
+  document.querySelectorAll('#modePicker .mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sfx('menu');
+      setPlayMode(btn.dataset.mode);
+    });
+  });
+  setPlayMode(loadPlayMode());
   if ($('btnSettings')) $('btnSettings').onclick = menuClick(showSettings);
   if ($('btnSettingsBack')) $('btnSettingsBack').onclick = menuClick(leaveSettings);
   if ($('btnResume')) $('btnResume').onclick = menuClick(resumeGame);
   if ($('btnPauseSettings')) $('btnPauseSettings').onclick = menuClick(showSettings);
-  if ($('btnPauseMenu')) $('btnPauseMenu').onclick = menuClick(showMenu);
+  if ($('btnPauseMenu')) $('btnPauseMenu').onclick = menuClick(quitFromPause);
   if ($('btnResultsAgain')) $('btnResultsAgain').onclick = menuClick(rematch);
   if ($('btnResultsMenu')) $('btnResultsMenu').onclick = menuClick(showMenu);
   if ($('btnResetBinds')) {
