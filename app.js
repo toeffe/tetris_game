@@ -2239,6 +2239,12 @@
     const list = $('resultsStats');
     if (!panel || !list) return;
     hide($('pause'));
+    hide(banner);
+    hide(btnAgain);
+    // Clear board "ELIMINATED" / top-out labels under the results overlay
+    boards.forEach(b => {
+      if (b.els && b.els.over) b.els.over.textContent = '';
+    });
     if (title) title.textContent = titleText || t('results');
     const board = boards.find(b => b.live) || boardById.get(myId);
     const stats = board && board.getMatchStats ? board.getMatchStats() : null;
@@ -2272,6 +2278,30 @@
     });
     show(panel);
     updateRematchHint();
+  }
+
+  let menuStatusTimer = 0;
+  function flashMenuStatus(text) {
+    const el = $('menuStatus');
+    if (!el) return;
+    if (menuStatusTimer) clearTimeout(menuStatusTimer);
+    el.hidden = false;
+    el.textContent = text || '';
+    menuStatusTimer = setTimeout(() => {
+      menuStatusTimer = 0;
+      el.hidden = true;
+      el.textContent = '';
+    }, 6000);
+  }
+
+  function clearMenuStatus() {
+    const el = $('menuStatus');
+    if (menuStatusTimer) clearTimeout(menuStatusTimer);
+    menuStatusTimer = 0;
+    if (el) {
+      el.hidden = true;
+      el.textContent = '';
+    }
   }
 
   function clearBoards() {
@@ -2723,6 +2753,11 @@
     show(menu);
     const a = audio();
     if (a) a.stopMusic(350);
+  }
+
+  function showMenuWithStatus(msg) {
+    showMenu();
+    if (msg) flashMenuStatus(msg);
   }
 
   function syncSettingsUI() {
@@ -3225,9 +3260,8 @@
 
   function showRematchBtn() {
     const label = t('playAgain');
-    btnAgain.textContent = label;
-    btnAgain.disabled = false;
-    show(btnAgain);
+    const results = $('results');
+    const usingResults = results && !results.hidden;
     const btnResultsAgain = $('btnResultsAgain');
     if (btnResultsAgain) {
       btnResultsAgain.textContent = label;
@@ -3235,6 +3269,13 @@
     }
     const btnResultsMenu = $('btnResultsMenu');
     if (btnResultsMenu) btnResultsMenu.textContent = t('leave');
+    if (usingResults) {
+      hide(btnAgain);
+      return;
+    }
+    btnAgain.textContent = label;
+    btnAgain.disabled = false;
+    show(btnAgain);
     if ($('btnMenu')) $('btnMenu').textContent = t('leave');
   }
 
@@ -4730,16 +4771,12 @@
       return;
     }
     if (data.t === 'leave') {
-      // Host ended the session intentionally.
+      // Host ended the session intentionally — return to a clean main menu only.
       sessionLeaving = true;
       closeNet();
       sessionLeaving = false;
       setLobbyUrl(null);
-      showMenu();
-      if ($('netStatus')) {
-        show(netPanel);
-        $('netStatus').textContent = t('hostEndedSession');
-      }
+      showMenuWithStatus(t('hostEndedSession'));
       return;
     }
     if (data.t === 'lobby') {
@@ -5010,6 +5047,7 @@
   }
 
   function openNetUI(kind, preferredCode) {
+    clearMenuStatus();
     playMode = 'versus';
     setPlayerName(menuName.value || getPlayerName());
     hide(menu);

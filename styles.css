@@ -525,6 +525,10 @@ body.in-game .subtitle{display:none;}
 
 .panel button{margin-top:10px;}
 .panel .hint{color:#b8a888;}
+.menu-status{
+  color:var(--crimson) !important;
+  margin-top:12px !important;
+}
 .panel .field-label{color:#a89878;}
 .mode-picker{
   display:grid;
