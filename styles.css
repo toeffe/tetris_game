@@ -831,7 +831,6 @@ body.in-game #game{
   background-position:center, center, center center;
   background-repeat:no-repeat, no-repeat, no-repeat;
   transform:translate3d(0,0,0);
-  will-change:transform, background-position;
 }
 .game-stage::after{
   content:'';
