@@ -56,7 +56,6 @@
   const LOCK_DELAY_RATIO = 0.5;
   const MIN_LOCK_MS = 200;
   const MAX_LOCK_MS = 450;
-  const LOCK_RESET_MAX = 15; // successful moves/rotates while grounded may refresh the window
   const GARBAGE_TARGET = { clockwise: 1, random: 1, neighbors: 1 };
   const POWER_GRACE_MS = 10000;
   const POWER_CHANCE = { 2: 0.12, 3: 0.25, 4: 0.40 };
@@ -606,7 +605,6 @@
       this.elapsed = 0;
       this.acc = 0;
       this.lockAcc = 0;
-      this.lockResets = 0;
       this.over = false;
       this.gQueue = 0;
       this.combo = 0;
@@ -626,7 +624,6 @@
       this.canHold = true;
       this.acc = 0;
       this.lockAcc = 0;
-      this.lockResets = 0;
       if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
         this.over = true;
         if (this.els.over) this.els.over.textContent = t('topOut');
@@ -640,18 +637,6 @@
 
     lockDelayMs() {
       return Math.max(MIN_LOCK_MS, Math.min(MAX_LOCK_MS, Math.round(this.dropMs * LOCK_DELAY_RATIO)));
-    }
-
-    // Refresh lock window after a successful slide/kick while still on the floor.
-    bumpLockDelay() {
-      if (!this.grounded()) {
-        this.lockAcc = 0;
-        this.lockResets = 0;
-        return;
-      }
-      if (this.lockResets >= LOCK_RESET_MAX) return;
-      this.lockResets++;
-      this.lockAcc = 0;
     }
 
     hits(m, px, py) {
@@ -682,7 +667,6 @@
         this.piece = {type: swap, m, color: shape.color, x: ((COLS - m.length) / 2) | 0, y: 0};
         this.acc = 0;
         this.lockAcc = 0;
-        this.lockResets = 0;
         if (this.hits(this.piece.m, this.piece.x, this.piece.y)) {
           this.over = true;
           if (this.els.over) this.els.over.textContent = t('topOut');
@@ -743,7 +727,6 @@
       if (!this.canPlay()) return;
       if (!this.hits(this.piece.m, this.piece.x + dx, this.piece.y)) {
         this.piece.x += dx;
-        this.bumpLockDelay();
         syncState(this);
       }
     }
@@ -755,7 +738,6 @@
         if (!this.hits(rm, this.piece.x + k, this.piece.y)) {
           this.piece.m = rm;
           this.piece.x += k;
-          this.bumpLockDelay();
           syncState(this);
           return;
         }
@@ -769,7 +751,6 @@
         this.score += 1;
         this.acc = 0;
         this.lockAcc = 0;
-        if (!this.grounded()) this.lockResets = 0;
         this.paintHud();
         syncState(this);
       }
@@ -785,7 +766,6 @@
       }
       this.score += d * 2;
       this.lockAcc = 0;
-      this.lockResets = 0;
       this.lock();
     }
 
@@ -874,7 +854,6 @@
         if (!this.grounded()) {
           this.piece.y++;
           this.lockAcc = 0;
-          this.lockResets = 0;
           syncState(this);
         }
       }
@@ -883,7 +862,6 @@
         if (this.lockAcc >= this.lockDelayMs()) this.lock();
       } else {
         this.lockAcc = 0;
-        this.lockResets = 0;
       }
     }
 
