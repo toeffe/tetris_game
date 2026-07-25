@@ -142,7 +142,12 @@ body.in-game #atmosphere .vignette{
   width:100%;
   height:100%;
   display:block;
-  background:transparent;
+  background:transparent !important;
+  border:none !important;
+  outline:none !important;
+  box-shadow:none !important;
+  border-radius:0 !important;
+  max-width:none;
   visibility:hidden;
 }
 #banner{z-index:20;}
