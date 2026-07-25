@@ -32,9 +32,12 @@
 
   let vols = {
     master: loadVol(MASTER_KEY, 0.72),
-    music: loadVol(MUSIC_KEY, 0.42),
+    music: loadVol(MUSIC_KEY, 0.28),
     sfx: loadVol(SFX_KEY, 0.78),
   };
+  // MP3 beds are hotter than synth pads — keep headroom under SFX.
+  const BGM_BED = 0.32;
+  const BGM_BED_INTENSITY = 0.10;
   let muted = storageGet(MUTE_KEY) === '1';
 
   let musicOn = false;
@@ -318,7 +321,7 @@
     const t = now();
     // Open the bed slightly as the stack rises — still the same track
     musicFilter.frequency.setTargetAtTime(2200 + intensity * 4800, t, 0.25);
-    musicBedGain.gain.setTargetAtTime(0.78 + intensity * 0.22, t, 0.2);
+    musicBedGain.gain.setTargetAtTime(BGM_BED + intensity * BGM_BED_INTENSITY, t, 0.2);
   }
 
   function startMusicSource(buffer) {
@@ -345,7 +348,7 @@
 
     const t0 = now();
     bed.gain.setValueAtTime(0.0001, t0);
-    bed.gain.exponentialRampToValueAtTime(0.78 + targetIntensity * 0.22, t0 + 0.55);
+    bed.gain.exponentialRampToValueAtTime(BGM_BED + targetIntensity * BGM_BED_INTENSITY, t0 + 0.55);
 
     src.start(t0);
     musicSource = src;
