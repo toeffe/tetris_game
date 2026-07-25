@@ -164,47 +164,55 @@
     <p id="lobbyStatus" class="hint"></p>
     <p id="lobbyMode" class="hint lobby-mode" data-i18n="versusLobby">Versus battle</p>
     <div id="lobbySettingsSummary" class="lobby-settings-summary hint" hidden></div>
-    <label id="matchModeRow" class="setting-row" hidden>
-      <span data-i18n="matchMode">Match mode</span>
-      <select id="selMatchMode">
-        <option value="versus" data-i18n="modeVersus" selected>Versus</option>
-        <option value="sprint" data-i18n="modeSprint">Sprint</option>
-        <option value="ultra" data-i18n="modeUltra">Ultra</option>
-      </select>
-    </label>
-    <label id="dropSpeedRow" class="setting-row" hidden>
-      <span data-i18n="dropSpeed">Drop speed</span>
-      <select id="selDropSpeed">
-        <option value="slow" data-i18n="dropSlow">Slow</option>
-        <option value="normal" data-i18n="dropNormal" selected>Normal</option>
-        <option value="fast" data-i18n="dropFast">Fast</option>
-        <option value="turbo" data-i18n="dropTurbo">Turbo</option>
-        <option value="insane" data-i18n="dropInsane">Insane</option>
-        <option value="ninja" data-i18n="dropNinja">Ninja</option>
-      </select>
-    </label>
-    <label id="garbageTargetRow" class="setting-row" hidden>
-      <span data-i18n="garbageTarget">Who gets garbage</span>
-      <select id="selGarbageTarget">
-        <option value="clockwise" data-i18n="targetClockwise" selected>Always the next player</option>
-        <option value="random" data-i18n="targetRandom">Anyone still alive</option>
-        <option value="neighbors" data-i18n="targetNeighbors">Only left or right</option>
-      </select>
-    </label>
-    <label id="speedRampRow" class="setting-row" hidden>
-      <span data-i18n="speedRamp">Speed increases over time</span>
-      <select id="selSpeedRamp">
-        <option value="on" data-i18n="optOn" selected>On</option>
-        <option value="off" data-i18n="optOff">Off</option>
-      </select>
-    </label>
-    <label id="powerUpsRow" class="setting-row" hidden>
-      <span data-i18n="powerUps">Relics (power-ups)</span>
-      <select id="selPowerUps">
-        <option value="off" data-i18n="optOff" selected>Off</option>
-        <option value="on" data-i18n="optOn">On</option>
-      </select>
-    </label>
+    <details id="lobbySettings" class="lobby-settings" hidden>
+      <summary class="lobby-settings-toggle">
+        <span data-i18n="matchSettings">Match settings</span>
+        <span id="lobbySettingsPeek" class="lobby-settings-peek" aria-hidden="true"></span>
+      </summary>
+      <div class="lobby-settings-body">
+        <label id="matchModeRow" class="setting-row">
+          <span data-i18n="matchMode">Match mode</span>
+          <select id="selMatchMode">
+            <option value="versus" data-i18n="modeVersus" selected>Versus</option>
+            <option value="sprint" data-i18n="modeSprint">Sprint</option>
+            <option value="ultra" data-i18n="modeUltra">Ultra</option>
+          </select>
+        </label>
+        <label id="dropSpeedRow" class="setting-row">
+          <span data-i18n="dropSpeed">Drop speed</span>
+          <select id="selDropSpeed">
+            <option value="slow" data-i18n="dropSlow">Slow</option>
+            <option value="normal" data-i18n="dropNormal" selected>Normal</option>
+            <option value="fast" data-i18n="dropFast">Fast</option>
+            <option value="turbo" data-i18n="dropTurbo">Turbo</option>
+            <option value="insane" data-i18n="dropInsane">Insane</option>
+            <option value="ninja" data-i18n="dropNinja">Ninja</option>
+          </select>
+        </label>
+        <label id="garbageTargetRow" class="setting-row">
+          <span data-i18n="garbageTarget">Who gets garbage</span>
+          <select id="selGarbageTarget">
+            <option value="clockwise" data-i18n="targetClockwise" selected>Always the next player</option>
+            <option value="random" data-i18n="targetRandom">Anyone still alive</option>
+            <option value="neighbors" data-i18n="targetNeighbors">Only left or right</option>
+          </select>
+        </label>
+        <label id="speedRampRow" class="setting-row">
+          <span data-i18n="speedRamp">Speed increases over time</span>
+          <select id="selSpeedRamp">
+            <option value="on" data-i18n="optOn" selected>On</option>
+            <option value="off" data-i18n="optOff">Off</option>
+          </select>
+        </label>
+        <label id="powerUpsRow" class="setting-row">
+          <span data-i18n="powerUps">Relics (power-ups)</span>
+          <select id="selPowerUps">
+            <option value="off" data-i18n="optOff" selected>Off</option>
+            <option value="on" data-i18n="optOn">On</option>
+          </select>
+        </label>
+      </div>
+    </details>
     <button id="btnReady" type="button" data-i18n="ready">Ready</button>
     <button id="btnStart" type="button" hidden disabled data-i18n="startMatch">Start</button>
     <button id="btnLobbyLeave" class="secondary" type="button" data-i18n="leave">Leave</button>

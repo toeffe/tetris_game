@@ -191,6 +191,7 @@
       peerJoined: '{name} joined',
       lobbyTitle: 'Lobby',
       matchMode: 'Match mode',
+      matchSettings: 'Match settings',
       modeVersus: 'Versus',
       startMatch: 'Start',
       leaveSession: 'Leave session',
@@ -381,6 +382,7 @@
       peerJoined: '{name} tilsluttede',
       lobbyTitle: 'Lobby',
       matchMode: 'Kamp-tilstand',
+      matchSettings: 'Kampindstillinger',
       modeVersus: 'Versus',
       startMatch: 'Start',
       leaveSession: 'Forlad session',
@@ -870,6 +872,7 @@
     syncMuteBtn();
     // Refresh dynamic UI if present
     if (typeof renderRoster === 'function' && matchPhase === 'lobby') renderRoster();
+    if (typeof updateLobbySettingsViews === 'function' && matchPhase === 'lobby') updateLobbySettingsViews();
     if (typeof updateRematchHint === 'function' && matchPhase === 'post') updateRematchHint();
     if (btnAgain && !btnAgain.hidden) {
       if (btnAgain.disabled && matchPhase === 'post') btnAgain.textContent = t('ready');
@@ -2773,17 +2776,13 @@
     const lobbyMode = $('lobbyMode');
     if (lobbyMode) lobbyMode.hidden = false;
     if (mode === 'host') {
-      show(matchModeRow);
-      show(speedRampRow);
+      show($('lobbySettings'));
       selSpeedRamp.value = timeRampEnabled ? 'on' : 'off';
       selSpeedRamp.disabled = false;
-      show(powerUpsRow);
       selPowerUps.value = powerUpsEnabled ? 'on' : 'off';
       selPowerUps.disabled = false;
-      show(dropSpeedRow);
       selDropSpeed.value = DROP_SPEED[dropSpeed] ? dropSpeed : 'normal';
       selDropSpeed.disabled = false;
-      show(garbageTargetRow);
       selGarbageTarget.value = GARBAGE_TARGET[garbageTarget] ? garbageTarget : 'clockwise';
       selGarbageTarget.disabled = false;
       if (selMatchMode) {
@@ -2791,11 +2790,7 @@
         selMatchMode.disabled = false;
       }
     } else {
-      hide(matchModeRow);
-      hide(speedRampRow);
-      hide(powerUpsRow);
-      hide(dropSpeedRow);
-      hide(garbageTargetRow);
+      hide($('lobbySettings'));
       selSpeedRamp.disabled = true;
       selPowerUps.disabled = true;
       selDropSpeed.disabled = true;
@@ -3537,20 +3532,23 @@
     if (selSpeedRamp) selSpeedRamp.value = timeRampEnabled ? 'on' : 'off';
     if (selPowerUps) selPowerUps.value = powerUpsEnabled ? 'on' : 'off';
 
+    const liveSummary = t('settingsLive', {
+      speed: dropSpeed,
+      garbage: garbageTarget,
+      ramp: timeRampEnabled ? t('optOn') : t('optOff'),
+      relics: powerUpsEnabled ? t('optOn') : t('optOff'),
+    });
     const summary = $('lobbySettingsSummary');
     if (summary) {
       if (mode === 'guest') {
         summary.hidden = false;
-        summary.textContent = t('settingsLive', {
-          speed: dropSpeed,
-          garbage: garbageTarget,
-          ramp: timeRampEnabled ? t('optOn') : t('optOff'),
-          relics: powerUpsEnabled ? t('optOn') : t('optOff'),
-        });
+        summary.textContent = liveSummary;
       } else {
         summary.hidden = true;
       }
     }
+    const peek = $('lobbySettingsPeek');
+    if (peek) peek.textContent = mode === 'host' ? liveSummary : '';
     updateStartButton();
   }
 

@@ -501,10 +501,19 @@ body.in-game .subtitle{display:none;}
   border-width:0 0 2px 2px;
 }
 #menu.panel,
-#netPanel.panel,
-#lobby.panel{
+#netPanel.panel{
   margin-top:clamp(4vh, 8vh, 12vh);
   animation:panel-enter .55s ease-out .1s both;
+}
+#lobby.panel{
+  margin-top:clamp(0.5vh, 1.5vh, 3vh);
+  max-height:min(94vh, calc(100dvh - 0.75rem));
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  animation:panel-enter .55s ease-out .1s both;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(212,175,55,.35) transparent;
 }
 @keyframes panel-enter{
   from{opacity:0;transform:translateY(14px) scale(.97);}
@@ -580,8 +589,17 @@ body.in-game .subtitle{display:none;}
   font-size:.68rem !important;
   color:var(--gold) !important;
 }
-.lobby-panel{width:min(420px,100%);}
-.lobby-session{margin-bottom:8px;}
+.lobby-panel{
+  width:min(420px,100%);
+  padding:18px 18px 14px;
+  box-sizing:border-box;
+}
+.lobby-panel .settings-title{
+  margin:0 0 6px;
+  font-size:1.15rem;
+}
+.lobby-panel button{margin-top:8px;}
+.lobby-session{margin-bottom:4px;}
 .lobby-conn{
   margin:6px 0 0 !important;
   font-size:.68rem !important;
@@ -596,6 +614,70 @@ body.in-game .subtitle{display:none;}
   font-size:.72rem !important;
   line-height:1.45;
 }
+.lobby-settings{
+  margin:8px 0 4px;
+  border:1px solid rgba(212,175,55,.28);
+  background:rgba(0,0,0,.22);
+  border-radius:2px;
+}
+.lobby-settings[hidden]{display:none !important;}
+.lobby-settings-toggle{
+  list-style:none;
+  cursor:pointer;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding:10px 12px;
+  font-family:var(--font-display);
+  font-size:.78rem;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--gold);
+  user-select:none;
+}
+.lobby-settings-toggle::-webkit-details-marker{display:none;}
+.lobby-settings-toggle::after{
+  content:'▾';
+  position:absolute;
+  right:12px;
+  top:10px;
+  font-size:.7rem;
+  opacity:.7;
+  transition:transform .2s ease;
+}
+.lobby-settings{position:relative;}
+.lobby-settings[open] .lobby-settings-toggle::after{transform:rotate(-180deg);}
+.lobby-settings-peek{
+  font-family:var(--font-body);
+  font-size:.68rem;
+  letter-spacing:.04em;
+  text-transform:none;
+  color:var(--muted);
+  line-height:1.35;
+}
+.lobby-settings[open] .lobby-settings-peek{display:none;}
+.lobby-settings-body{
+  padding:0 10px 10px;
+  border-top:1px solid rgba(212,175,55,.16);
+}
+.lobby-settings-body .setting-row{
+  margin:8px 0;
+  font-size:13px;
+  gap:8px;
+}
+.lobby-settings-body .setting-row span{
+  flex:1 1 auto;
+  min-width:0;
+  line-height:1.25;
+}
+.lobby-settings-body .setting-row select{
+  flex:0 1 46%;
+  max-width:11.5rem;
+  min-width:0;
+}
+#lobby .name-input{margin-top:8px;}
+#lobby .roster{margin:8px 0 4px;max-height:9.5rem;overflow-y:auto;}
+#lobby .hint{margin:6px 0 0;}
 #btnStart:disabled{opacity:.45;cursor:not-allowed;}
 .mode-objective{
   font-family:var(--font-display);
@@ -636,7 +718,6 @@ body.in-game .subtitle{display:none;}
   box-shadow:inset 0 2px 6px rgba(80,50,20,.28),0 0 0 2px rgba(212,175,55,.35);
 }
 #menu .name-input{margin-bottom:14px;}
-#lobby .name-input{margin-top:12px;}
 #lobby .room-code{margin-top:0;}
 
 button{
