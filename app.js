@@ -50,6 +50,7 @@
   const GARBAGE = {1:0,2:1,3:2,4:4};
   const TIME_LEVEL_MS = 30000; // level up every 30s of play, in addition to line-based leveling
   const MIN_DROP_MS = 40; // fastest possible drop interval (ninja base)
+  const LEVEL_DROP_STEP_MS = 25; // how much each level shortens the drop interval
   const DROP_SPEED = { slow: 1400, normal: 1000, fast: 400, turbo: 160, insane: 80, ninja: 40 };
   // Lock slide scales with gravity: ~50% of current dropMs, with a floor so
   // fast/turbo/insane/ninja still allow a readable slide before lock.
@@ -872,7 +873,7 @@
       const changed = level !== this.level;
       this.level = level;
       const baseDropMs = DROP_SPEED[dropSpeed] || DROP_SPEED.normal;
-      let dropMs = Math.max(MIN_DROP_MS, baseDropMs - (level - 1) * 75);
+      let dropMs = Math.max(MIN_DROP_MS, baseDropMs - (level - 1) * LEVEL_DROP_STEP_MS);
       if (this.torchUntil && performance.now() < this.torchUntil) {
         dropMs = Math.max(MIN_DROP_MS, dropMs / 2);
       } else {
