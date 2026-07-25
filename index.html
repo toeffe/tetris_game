@@ -42,9 +42,29 @@
     <p class="hint" data-i18n="menuHint">Up to 8 players.</p>
   </div>
 
-  <div id="settings" class="panel stone-tablet" hidden>
+  <div id="settings" class="panel stone-tablet settings-panel" hidden>
     <span class="panel-corners" aria-hidden="true"></span>
-    <h2 class="settings-title" data-i18n="settingsTitle">Controls</h2>
+    <h2 class="settings-title" data-i18n="settingsTitle">Settings</h2>
+
+    <h3 class="settings-section" data-i18n="audioTitle">Audio</h3>
+    <label class="setting-slider">
+      <span data-i18n="volMaster">Master</span>
+      <input id="rngMaster" type="range" min="0" max="100" step="1" value="72">
+      <output id="outMaster" for="rngMaster">72</output>
+    </label>
+    <label class="setting-slider">
+      <span data-i18n="volMusic">Background music</span>
+      <input id="rngMusic" type="range" min="0" max="100" step="1" value="28">
+      <output id="outMusic" for="rngMusic">28</output>
+    </label>
+    <label class="setting-slider">
+      <span data-i18n="volSfx">SFX</span>
+      <input id="rngSfx" type="range" min="0" max="100" step="1" value="78">
+      <output id="outSfx" for="rngSfx">78</output>
+    </label>
+    <p class="hint" data-i18n="audioHint">Background music from audio/bgm.mp3 · SFX are synthesized in-browser.</p>
+
+    <h3 class="settings-section" data-i18n="controlsTitle">Controls</h3>
     <label class="setting-slider">
       <span data-i18n="dasLabel">DAS (ms)</span>
       <input id="rngDas" type="range" min="50" max="400" step="10" value="160">
@@ -64,24 +84,7 @@
       <input id="chkShake" type="checkbox" checked>
       <span data-i18n="shakeLabel">Screen shake</span>
     </label>
-    <h2 class="settings-title settings-sub" data-i18n="audioTitle">Audio</h2>
-    <label class="setting-slider">
-      <span data-i18n="volMaster">Master</span>
-      <input id="rngMaster" type="range" min="0" max="100" step="1" value="72">
-      <output id="outMaster" for="rngMaster">72</output>
-    </label>
-    <label class="setting-slider">
-      <span data-i18n="volMusic">Music</span>
-      <input id="rngMusic" type="range" min="0" max="100" step="1" value="28">
-      <output id="outMusic" for="rngMusic">28</output>
-    </label>
-    <label class="setting-slider">
-      <span data-i18n="volSfx">SFX</span>
-      <input id="rngSfx" type="range" min="0" max="100" step="1" value="78">
-      <output id="outSfx" for="rngSfx">78</output>
-    </label>
     <p class="hint" data-i18n="settingsHint">Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.</p>
-    <p class="hint" data-i18n="audioHint">Background music from audio/bgm.mp3 · SFX are synthesized in-browser.</p>
     <button id="btnSettingsBack" class="secondary" type="button" data-i18n="back">Back</button>
   </div>
 

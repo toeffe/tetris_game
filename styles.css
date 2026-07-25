@@ -263,11 +263,22 @@ body.in-game #atmosphere .vignette{
   letter-spacing:.08em;
   text-transform:uppercase;
 }
-.settings-sub{
-  margin-top:18px;
-  font-size:.95rem;
-  opacity:.92;
+.settings-panel{
+  max-height:min(82vh, 720px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
 }
+.settings-section{
+  margin:16px 0 8px;
+  font-family:var(--font-body);
+  font-size:.72rem;
+  font-weight:700;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  text-align:center;
+  color:var(--muted);
+}
+.settings-section:first-of-type{margin-top:4px;}
 
 .title{
   font-family:var(--font-display);
