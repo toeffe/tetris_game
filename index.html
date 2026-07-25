@@ -84,8 +84,37 @@
       <input id="chkShake" type="checkbox" checked>
       <span data-i18n="shakeLabel">Screen shake</span>
     </label>
+    <label class="setting-check">
+      <input id="chkColorblind" type="checkbox">
+      <span data-i18n="colorblindLabel">Colorblind piece patterns</span>
+    </label>
+    <label class="setting-slider">
+      <span data-i18n="gridOpacityLabel">Board grid</span>
+      <input id="rngGrid" type="range" min="0" max="40" step="1" value="16">
+      <output id="outGrid" for="rngGrid">16</output>
+    </label>
+    <h3 class="settings-section" data-i18n="bindsTitle">Key bindings</h3>
+    <div id="bindList" class="bind-list"></div>
+    <button id="btnResetBinds" class="secondary" type="button" data-i18n="resetBinds">Reset keys</button>
     <p class="hint" data-i18n="settingsHint">Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.</p>
     <button id="btnSettingsBack" class="secondary" type="button" data-i18n="back">Back</button>
+  </div>
+
+  <div id="pause" class="panel stone-tablet overlay-panel" hidden>
+    <span class="panel-corners" aria-hidden="true"></span>
+    <h2 class="settings-title" data-i18n="paused">Paused</h2>
+    <button id="btnResume" type="button" data-i18n="resume">Resume</button>
+    <button id="btnPauseSettings" class="secondary" type="button" data-i18n="settings">Settings</button>
+    <button id="btnPauseMenu" class="secondary" type="button" data-i18n="menu">Menu</button>
+  </div>
+
+  <div id="results" class="panel stone-tablet overlay-panel results-panel" hidden>
+    <span class="panel-corners" aria-hidden="true"></span>
+    <h2 class="settings-title" id="resultsTitle">Results</h2>
+    <ul class="results-stats" id="resultsStats"></ul>
+    <p id="resultsHint" class="hint rematch-hint"></p>
+    <button id="btnResultsAgain" type="button" data-i18n="playAgain">Play again</button>
+    <button id="btnResultsMenu" class="secondary" type="button" data-i18n="menu">Menu</button>
   </div>
 
   <div id="netPanel" class="panel stone-tablet" hidden>

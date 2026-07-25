@@ -82,6 +82,10 @@
   const LANG_KEY = 'vibetrisimo-lang';
   const FLASHY_KEY = 'vibetrisimo-flashy';
   const SHAKE_KEY = 'vibetrisimo-shake';
+  const COLORBLIND_KEY = 'vibetrisimo-colorblind';
+  const GRID_KEY = 'vibetrisimo-grid';
+  const BINDS_KEY = 'vibetrisimo-binds';
+  const DEFAULT_GRID_OPACITY = 16;
   const CLEAR_FLASH_MS = 220;
   const CLEAR_COLLAPSE_MS = 280;
   const PIECE_LERP_MS = 85; // higher = smoother / more visible glide
@@ -218,7 +222,7 @@
       waitReady: ' · waiting for ready',
       startingSoon: ' · starting…',
       go: 'FIGHT!',
-      ctrlHint: 'WASD / arrows · Z/X rotate · space hard · C keep · V relic',
+      ctrlHint: 'WASD / arrows · Z/X rotate · space hard · C keep · V relic · Esc pause · swipe board',
       settings: 'Settings',
       settingsTitle: 'Settings',
       controlsTitle: 'Controls',
@@ -228,6 +232,33 @@
       settingsHint: 'Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.',
       settingsSaved: 'Saved',
       shakeLabel: 'Screen shake',
+      colorblindLabel: 'Colorblind piece patterns',
+      gridOpacityLabel: 'Board grid',
+      bindsTitle: 'Key bindings',
+      resetBinds: 'Reset keys',
+      bindLeft: 'Left',
+      bindRight: 'Right',
+      bindSoft: 'Soft drop',
+      bindHard: 'Hard drop',
+      bindRotCw: 'Rotate CW',
+      bindRotCcw: 'Rotate CCW',
+      bindHold: 'Hold',
+      bindPower: 'Relic',
+      bindPause: 'Pause',
+      bindListening: 'Press a key…',
+      paused: 'Paused',
+      resume: 'Resume',
+      gameOver: 'Game over',
+      results: 'Results',
+      statScore: 'Score',
+      statLines: 'Lines',
+      statLevel: 'Level',
+      statTime: 'Time',
+      statPps: 'PPS',
+      statApm: 'APM',
+      statMaxCombo: 'Max combo',
+      statTspins: 'T-Spins',
+      statTetrises: 'Tetrises',
       audioTitle: 'Audio',
       volMaster: 'Master',
       volMusic: 'Background music',
@@ -336,7 +367,7 @@
       waitReady: ' · venter på klar',
       startingSoon: ' · starter…',
       go: 'KÆMP!',
-      ctrlHint: 'WASD / piletaster · Z/X drej · mellemrum hårdt · C gem · V relikvie',
+      ctrlHint: 'WASD / piletaster · Z/X drej · mellemrum hårdt · C gem · V relikvie · Esc pause · swipe',
       settings: 'Indstillinger',
       settingsTitle: 'Indstillinger',
       controlsTitle: 'Styring',
@@ -346,6 +377,33 @@
       settingsHint: 'Lavere DAS/ARR = hurtigere bevægelse. Blødt fald gentages mens tasten holdes.',
       settingsSaved: 'Gemt',
       shakeLabel: 'Skærmryst',
+      colorblindLabel: 'Farveblinde mønstre',
+      gridOpacityLabel: 'Bræt-gitter',
+      bindsTitle: 'Tastatur',
+      resetBinds: 'Nulstil taster',
+      bindLeft: 'Venstre',
+      bindRight: 'Højre',
+      bindSoft: 'Blødt fald',
+      bindHard: 'Hårdt fald',
+      bindRotCw: 'Drej med uret',
+      bindRotCcw: 'Drej mod uret',
+      bindHold: 'Gem',
+      bindPower: 'Relikvie',
+      bindPause: 'Pause',
+      bindListening: 'Tryk på en tast…',
+      paused: 'Pauset',
+      resume: 'Fortsæt',
+      gameOver: 'Spillet er slut',
+      results: 'Resultat',
+      statScore: 'Point',
+      statLines: 'Linjer',
+      statLevel: 'Niveau',
+      statTime: 'Tid',
+      statPps: 'PPS',
+      statApm: 'APM',
+      statMaxCombo: 'Max kombo',
+      statTspins: 'T-Spins',
+      statTetrises: 'Tetris',
       audioTitle: 'Lyd',
       volMaster: 'Master',
       volMusic: 'Baggrundsmusik',
@@ -417,6 +475,152 @@
   }
 
   let shakeEnabled = detectShake();
+
+  function detectColorblind() {
+    return storageGet(COLORBLIND_KEY) === '1';
+  }
+
+  let colorblindEnabled = detectColorblind();
+
+  function setColorblind(on) {
+    colorblindEnabled = !!on;
+    storageSet(COLORBLIND_KEY, colorblindEnabled ? '1' : '0');
+    const chk = document.getElementById('chkColorblind');
+    if (chk) chk.checked = colorblindEnabled;
+  }
+
+  function detectGridOpacity() {
+    const n = parseInt(storageGet(GRID_KEY), 10);
+    if (Number.isFinite(n)) return Math.max(0, Math.min(40, n));
+    return DEFAULT_GRID_OPACITY;
+  }
+
+  let gridOpacity = detectGridOpacity();
+
+  function setGridOpacity(v) {
+    gridOpacity = Math.max(0, Math.min(40, v | 0));
+    storageSet(GRID_KEY, String(gridOpacity));
+    const rng = document.getElementById('rngGrid');
+    const out = document.getElementById('outGrid');
+    if (rng) rng.value = String(gridOpacity);
+    if (out) out.textContent = String(gridOpacity);
+  }
+
+  const BIND_DEFS = [
+    { action: 'left', label: 'bindLeft', code: 'ArrowLeft' },
+    { action: 'right', label: 'bindRight', code: 'ArrowRight' },
+    { action: 'soft', label: 'bindSoft', code: 'ArrowDown' },
+    { action: 'hard', label: 'bindHard', code: 'Space' },
+    { action: 'rotCw', label: 'bindRotCw', code: 'KeyX' },
+    { action: 'rotCcw', label: 'bindRotCcw', code: 'KeyZ' },
+    { action: 'hold', label: 'bindHold', code: 'KeyC' },
+    { action: 'power', label: 'bindPower', code: 'KeyV' },
+    { action: 'pause', label: 'bindPause', code: 'Escape' },
+  ];
+  const DEFAULT_BINDS = Object.fromEntries(BIND_DEFS.map(d => [d.action, d.code]));
+  // Always-on aliases so classic WASD keeps working alongside rebinds.
+  const FIXED_ALIASES = {
+    KeyA: 'left', KeyD: 'right', KeyS: 'soft', KeyW: 'rotCw', ArrowUp: 'rotCw',
+  };
+
+  function loadBinds() {
+    const out = { ...DEFAULT_BINDS };
+    try {
+      const raw = storageGet(BINDS_KEY);
+      if (!raw) return out;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return out;
+      for (const d of BIND_DEFS) {
+        if (typeof parsed[d.action] === 'string' && parsed[d.action]) {
+          out[d.action] = parsed[d.action];
+        }
+      }
+    } catch (_) {}
+    return out;
+  }
+
+  let keyBinds = loadBinds();
+  let bindListenAction = null;
+
+  function saveBinds() {
+    storageSet(BINDS_KEY, JSON.stringify(keyBinds));
+  }
+
+  function setBinds(next) {
+    keyBinds = { ...DEFAULT_BINDS, ...next };
+    saveBinds();
+    renderBindList();
+  }
+
+  function codeLabel(code) {
+    if (!code) return '—';
+    if (code === 'Space') return 'Space';
+    if (code === 'Escape') return 'Esc';
+    if (code.startsWith('Arrow')) return code.slice(5);
+    if (code.startsWith('Key') && code.length === 4) return code.slice(3);
+    if (code.startsWith('Digit')) return code.slice(5);
+    return code;
+  }
+
+  function actionForCode(code) {
+    if (!code) return null;
+    for (const d of BIND_DEFS) {
+      if (keyBinds[d.action] === code) return d.action;
+    }
+    return FIXED_ALIASES[code] || null;
+  }
+
+  function renderBindList() {
+    const list = document.getElementById('bindList');
+    if (!list) return;
+    list.innerHTML = '';
+    for (const d of BIND_DEFS) {
+      const row = document.createElement('div');
+      row.className = 'bind-row';
+      const label = document.createElement('span');
+      label.textContent = t(d.label);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.bind = d.action;
+      const listening = bindListenAction === d.action;
+      btn.classList.toggle('listening', listening);
+      btn.textContent = listening ? t('bindListening') : codeLabel(keyBinds[d.action]);
+      btn.addEventListener('click', () => startBindListen(d.action));
+      row.append(label, btn);
+      list.appendChild(row);
+    }
+  }
+
+  function startBindListen(action) {
+    bindListenAction = action;
+    renderBindList();
+  }
+
+  function cancelBindListen() {
+    if (!bindListenAction) return;
+    bindListenAction = null;
+    renderBindList();
+  }
+
+  function applyBindCapture(code) {
+    if (!bindListenAction || !code) return false;
+    if (code === 'Escape' && bindListenAction !== 'pause') {
+      cancelBindListen();
+      return true;
+    }
+    const action = bindListenAction;
+    for (const d of BIND_DEFS) {
+      if (d.action !== action && keyBinds[d.action] === code) {
+        keyBinds[d.action] = keyBinds[action];
+      }
+    }
+    keyBinds[action] = code;
+    bindListenAction = null;
+    saveBinds();
+    renderBindList();
+    sfx('menu');
+    return true;
+  }
 
   function setFlashy(on) {
     flashyEnabled = !!on;
@@ -548,6 +752,7 @@
       else if (matchPhase === 'post' || matchPhase === 'playing') btnAgain.textContent = t('playAgain');
     }
     if ($('ctrlHint') && matchPhase === 'playing') $('ctrlHint').textContent = t('ctrlHint');
+    if (typeof renderBindList === 'function') renderBindList();
     if ($('netLabel') && !$('netPanel').hidden && mode === 'guest') {
       $('netLabel').textContent = t('enterCode');
     }
@@ -613,7 +818,10 @@
   let boards = [];
   let boardById = new Map();
   let running = false, ended = false, eliminated = false;
+  let paused = false;
+  let settingsFrom = 'menu'; // 'menu' | 'pause'
   let matchPhase = 'idle'; // idle | lobby | countdown | playing | post
+  let resultsAnimToken = 0;
   let last = 0, raf = 0, logicTimer = 0, countdownTimer = 0;
   // Synced match start: host waits for guest acks, then fires `go` and delays
   // its own countdown by ~RTT/2 so gravity does not begin a hop ahead of guests.
@@ -823,6 +1031,7 @@
         ctx.fillRect(px + 1, py + 1, Math.max(1, w - 2), bevel);
         ctx.fillStyle = 'rgba(0,0,0,.28)';
         ctx.fillRect(px + 1, py + h - bevel, Math.max(1, w - 2), bevel);
+        drawColorblindMark(ctx, px, py, w, h, type);
       }
       ctx.globalAlpha = prev;
       return;
@@ -857,6 +1066,51 @@
       ctx.fillStyle = 'rgba(0,0,0,.2)';
       ctx.fillRect(px + 2, py + (h / 2 | 0), Math.max(1, w - 4), 1);
     }
+    if (!ghost) drawColorblindMark(ctx, px, py, w, h, type);
+  }
+
+  function drawColorblindMark(ctx, px, py, w, h, type) {
+    if (!colorblindEnabled || !type || type === GARBAGE_TYPE || w < 6) return;
+    const cx = px + w / 2;
+    const cy = py + h / 2;
+    const m = Math.max(1, (Math.min(w, h) * 0.12) | 0);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,248,220,.75)';
+    ctx.fillStyle = 'rgba(255,248,220,.75)';
+    ctx.lineWidth = Math.max(1, m * 0.7);
+    ctx.lineCap = 'round';
+    if (type === 'I') {
+      ctx.beginPath();
+      ctx.moveTo(px + m, cy);
+      ctx.lineTo(px + w - m, cy);
+      ctx.stroke();
+    } else if (type === 'O') {
+      ctx.strokeRect(px + m * 1.5, py + m * 1.5, w - m * 3, h - m * 3);
+    } else if (type === 'T') {
+      ctx.beginPath();
+      ctx.moveTo(cx, py + m);
+      ctx.lineTo(px + w - m, py + h - m);
+      ctx.lineTo(px + m, py + h - m);
+      ctx.closePath();
+      ctx.stroke();
+    } else if (type === 'S') {
+      ctx.beginPath();
+      ctx.moveTo(px + m, py + h - m);
+      ctx.lineTo(px + w - m, py + m);
+      ctx.stroke();
+    } else if (type === 'Z') {
+      ctx.beginPath();
+      ctx.moveTo(px + m, py + m);
+      ctx.lineTo(px + w - m, py + h - m);
+      ctx.stroke();
+    } else if (type === 'J') {
+      ctx.fillRect(px + m, py + m, m, h - m * 2);
+      ctx.fillRect(px + m, py + h - m * 2, w * 0.45, m);
+    } else if (type === 'L') {
+      ctx.fillRect(px + w - m * 2, py + m, m, h - m * 2);
+      ctx.fillRect(px + w * 0.35, py + h - m * 2, w * 0.45, m);
+    }
+    ctx.restore();
   }
 
   function drawMiniAt(ctx, type, size, ox0, oy0) {
@@ -938,6 +1192,11 @@
       this.gQueue = 0;
       this.combo = 0;
       this.b2b = false;
+      this.piecesPlaced = 0;
+      this.inputs = 0;
+      this.maxCombo = 0;
+      this.tspinCount = 0;
+      this.tetrisCount = 0;
       this.lastAction = null; // 'move' | 'rotate' | 'drop'
       this.lastKick = 0;
       this.flashUntil = 0;
@@ -1065,7 +1324,26 @@
     }
 
     canPlay() {
-      return this.live && !this.over && !ended && matchPhase === 'playing' && !this.clearAnim;
+      return this.live && !this.over && !ended && !paused && matchPhase === 'playing' && !this.clearAnim;
+    }
+
+    noteInput() {
+      this.inputs++;
+    }
+
+    getMatchStats() {
+      const sec = Math.max(0.001, this.elapsed / 1000);
+      return {
+        score: this.score | 0,
+        lines: this.lines | 0,
+        level: this.level | 0,
+        elapsed: this.elapsed,
+        pps: this.piecesPlaced / sec,
+        apm: (this.inputs / sec) * 60,
+        maxCombo: this.maxCombo | 0,
+        tspins: this.tspinCount | 0,
+        tetrises: this.tetrisCount | 0,
+      };
     }
 
     hold() {
@@ -1093,6 +1371,7 @@
         }
       }
       this.canHold = false;
+      this.noteInput();
       sfx('hold');
       this.paintHud();
       syncState(this, true);
@@ -1148,6 +1427,7 @@
       if (!this.hits(this.piece.m, this.piece.x + dx, this.piece.y)) {
         this.piece.x += dx;
         this.lastAction = 'move';
+        this.noteInput();
         this.tryLockReset();
         sfx('move');
         syncState(this);
@@ -1172,6 +1452,7 @@
           this.piece.r = to;
           this.lastAction = 'rotate';
           this.lastKick = i;
+          this.noteInput();
           this.tryLockReset();
           sfx('rotate');
           syncState(this);
@@ -1188,6 +1469,7 @@
         this.acc = 0;
         this.lockAcc = 0;
         this.lastAction = 'drop';
+        this.noteInput();
         sfx('soft');
         this.paintHud();
         syncState(this);
@@ -1205,6 +1487,7 @@
       this.score += d * 2;
       this.lockAcc = 0;
       this.lastAction = 'drop';
+      this.noteInput();
       this.visSnap = true;
       this.syncVis(true);
       if (d > 0) fxForHardDrop(this, d);
@@ -1316,6 +1599,7 @@
         return;
       }
       if (!fromHard) sfx('lock');
+      this.piecesPlaced++;
       this.lockPulse = 1;
       this.settleCells = placedCells;
       this.flashUntil = performance.now() + 120;
@@ -1325,6 +1609,7 @@
       const cleared = fullRows.length;
       let pendingGarbage = 0;
       const prevLevel = this.level;
+      if (tSpin) this.tspinCount++;
       if (cleared > 0) {
         let base = clearScore(cleared, tSpin);
         const difficult = cleared === 4 || tSpin > 0;
@@ -1332,6 +1617,8 @@
         if (b2bAwarded) base = (base * 1.5) | 0;
         if (this.combo > 0) this.score += 50 * this.combo * this.level;
         this.combo++;
+        if (this.combo > this.maxCombo) this.maxCombo = this.combo;
+        if (cleared === 4) this.tetrisCount++;
         this.score += base * this.level;
         this.lines += cleared;
         this.b2b = difficult;
@@ -1517,13 +1804,15 @@
       sideWash.addColorStop(1, theme.warm);
       ctx.fillStyle = sideWash;
       ctx.fillRect(0, 0, bw, bh);
-      ctx.strokeStyle = 'rgba(180,150,70,.16)';
-      ctx.lineWidth = 1;
-      for (let x = 0; x <= COLS; x++) {
-        ctx.beginPath(); ctx.moveTo(x * s + .5, 0); ctx.lineTo(x * s + .5, bh); ctx.stroke();
-      }
-      for (let y = 0; y <= ROWS; y++) {
-        ctx.beginPath(); ctx.moveTo(0, y * s + .5); ctx.lineTo(bw, y * s + .5); ctx.stroke();
+      if (gridOpacity > 0) {
+        ctx.strokeStyle = 'rgba(180,150,70,' + (gridOpacity / 100) + ')';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= COLS; x++) {
+          ctx.beginPath(); ctx.moveTo(x * s + .5, 0); ctx.lineTo(x * s + .5, bh); ctx.stroke();
+        }
+        for (let y = 0; y <= ROWS; y++) {
+          ctx.beginPath(); ctx.moveTo(0, y * s + .5); ctx.lineTo(bw, y * s + .5); ctx.stroke();
+        }
       }
 
       const anim = this.clearAnim;
@@ -1644,8 +1933,124 @@
   }
 
   /* ---------- UI helpers ---------- */
-  function show(el) { el.hidden = false; }
-  function hide(el) { el.hidden = true; }
+  function show(el) {
+    if (!el) return;
+    el.classList.remove('panel-exit');
+    el.hidden = false;
+  }
+  function hide(el) {
+    if (!el) return;
+    el.classList.remove('panel-exit');
+    el.hidden = true;
+  }
+
+  function formatMatchTime(ms) {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const m = (total / 60) | 0;
+    const s = total % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function animateCountUp(el, target, opts) {
+    const decimals = (opts && opts.decimals) || 0;
+    const duration = (opts && opts.duration) || 700;
+    const token = opts && opts.token;
+    const start = performance.now();
+    const from = 0;
+    function frame(now) {
+      if (token != null && token !== resultsAnimToken) return;
+      const p = Math.min(1, (now - start) / duration);
+      const e = 1 - Math.pow(1 - p, 3);
+      const v = from + (target - from) * e;
+      if (decimals > 0) el.textContent = v.toFixed(decimals);
+      else el.textContent = String(Math.round(v));
+      if (p < 1) requestAnimationFrame(frame);
+    }
+    if (reduceMotion()) {
+      el.textContent = decimals > 0 ? target.toFixed(decimals) : String(Math.round(target));
+      return;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function hideOverlayPanels() {
+    cancelBindListen();
+    const pauseEl = $('pause');
+    const resultsEl = $('results');
+    if (pauseEl) hide(pauseEl);
+    if (resultsEl) hide(resultsEl);
+    paused = false;
+  }
+
+  function isSoloMatch() {
+    return roster.length <= 1;
+  }
+
+  function pauseGame() {
+    if (matchPhase !== 'playing' || ended || eliminated) return;
+    if (paused) return;
+    paused = true;
+    resetHeldKeys();
+    hide($('results'));
+    show($('pause'));
+    sfx('menu');
+  }
+
+  function resumeGame() {
+    if (!paused) return;
+    paused = false;
+    hide($('pause'));
+    const settingsEl = $('settings');
+    if (settingsEl && settingsFrom === 'pause') hide(settingsEl);
+    last = performance.now();
+    sfx('menu');
+  }
+
+  function togglePause() {
+    if (paused) resumeGame();
+    else pauseGame();
+  }
+
+  function showResults(titleText) {
+    const panel = $('results');
+    const title = $('resultsTitle');
+    const list = $('resultsStats');
+    if (!panel || !list) return;
+    hide($('pause'));
+    if (title) title.textContent = titleText || t('results');
+    const board = boards.find(b => b.live) || boardById.get(myId);
+    const stats = board && board.getMatchStats ? board.getMatchStats() : null;
+    list.innerHTML = '';
+    resultsAnimToken++;
+    const token = resultsAnimToken;
+    const rows = stats ? [
+      { key: 'statScore', value: stats.score, kind: 'int' },
+      { key: 'statLines', value: stats.lines, kind: 'int' },
+      { key: 'statLevel', value: stats.level, kind: 'int' },
+      { key: 'statTime', value: formatMatchTime(stats.elapsed), kind: 'text' },
+      { key: 'statPps', value: stats.pps, kind: 'float' },
+      { key: 'statApm', value: stats.apm, kind: 'float' },
+      { key: 'statMaxCombo', value: stats.maxCombo, kind: 'int' },
+      { key: 'statTspins', value: stats.tspins, kind: 'int' },
+      { key: 'statTetrises', value: stats.tetrises, kind: 'int' },
+    ] : [];
+    rows.forEach((row, i) => {
+      const li = document.createElement('li');
+      const label = document.createElement('span');
+      label.textContent = t(row.key);
+      const out = document.createElement('output');
+      out.textContent = row.kind === 'text' ? row.value : '0';
+      li.append(label, out);
+      list.appendChild(li);
+      if (row.kind === 'int') {
+        animateCountUp(out, row.value, { duration: 550 + i * 40, token });
+      } else if (row.kind === 'float') {
+        animateCountUp(out, row.value, { duration: 550 + i * 40, decimals: 2, token });
+      }
+    });
+    show(panel);
+    updateRematchHint();
+  }
 
   function clearBoards() {
     boards = [];
@@ -1921,7 +2326,42 @@
     });
     boards.push(board);
     boardById.set(playerId, board);
+    if (live) wireBoardSwipe(canvas);
     return board;
+  }
+
+  function wireBoardSwipe(canvas) {
+    if (!canvas || canvas.dataset.swipeBound) return;
+    canvas.dataset.swipeBound = '1';
+    let tracking = false;
+    let sx = 0, sy = 0, t0 = 0;
+    canvas.addEventListener('pointerdown', e => {
+      if (!e.isPrimary || matchPhase !== 'playing' || ended || eliminated || paused) return;
+      tracking = true;
+      sx = e.clientX;
+      sy = e.clientY;
+      t0 = performance.now();
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    const end = e => {
+      if (!tracking) return;
+      tracking = false;
+      if (matchPhase !== 'playing' || ended || eliminated || paused) return;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      const adx = Math.abs(dx);
+      const ady = Math.abs(dy);
+      const thr = 28;
+      if (adx < thr && ady < thr) {
+        if (performance.now() - t0 < 280) act('rotCw');
+        return;
+      }
+      if (adx > ady) act(dx < 0 ? 'left' : 'right');
+      else if (dy > 0) act(ady > 90 ? 'hard' : 'soft');
+      else act('rotCcw');
+    };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', () => { tracking = false; });
   }
 
   function renderRoster() {
@@ -2008,6 +2448,7 @@
     hide(lobbyEl);
     hide(banner);
     hide(btnAgain);
+    hideOverlayPanels();
     const settingsEl = $('settings');
     if (settingsEl) hide(settingsEl);
     btnAgain.disabled = false;
@@ -2025,6 +2466,10 @@
     if (rngSoft) { rngSoft.value = String(SOFT_MS); if (outSoft) outSoft.textContent = String(SOFT_MS); }
     const chkShake = $('chkShake');
     if (chkShake) chkShake.checked = shakeEnabled;
+    const chkCb = $('chkColorblind');
+    if (chkCb) chkCb.checked = colorblindEnabled;
+    setGridOpacity(gridOpacity);
+    renderBindList();
     const a = audio();
     if (a) {
       const st = a.getState();
@@ -2037,11 +2482,24 @@
   }
 
   function showSettings() {
+    settingsFrom = (paused && matchPhase === 'playing') ? 'pause' : 'menu';
     hide(menu);
     hide(netPanel);
     hide(lobbyEl);
+    if (settingsFrom === 'pause') hide($('pause'));
     syncSettingsUI();
     show($('settings'));
+  }
+
+  function leaveSettings() {
+    cancelBindListen();
+    hide($('settings'));
+    if (settingsFrom === 'pause' && matchPhase === 'playing' && !ended) {
+      show($('pause'));
+      paused = true;
+      return;
+    }
+    showMenu();
   }
 
   /* ---------- match lifecycle ---------- */
@@ -2203,11 +2661,13 @@
   function beginMatch() {
     ended = false;
     eliminated = false;
+    paused = false;
     matchPhase = 'playing';
     running = true;
     resetHeldKeys();
     hide(banner);
     hide(btnAgain);
+    hideOverlayPanels();
     gameEl.classList.remove('game-entering');
     btnAgain.disabled = false;
     btnAgain.textContent = t('playAgain');
@@ -2246,6 +2706,8 @@
     let dt = now - last;
     last = now;
     if (!running || matchPhase !== 'playing' || ended) return;
+    // Solo pause freezes the clock; versus pause only blocks local input.
+    if (paused && isSoloMatch()) return;
     // Focused: clamp spikes. Hidden: allow larger dt so throttled timers still catch up.
     const maxDt = document.hidden ? 2000 : 100;
     dt = Math.min(Math.max(0, dt), maxDt);
@@ -2253,7 +2715,7 @@
       hitStopLeft -= dt;
       return;
     }
-    if (!document.hidden) tickHeldKeys(dt);
+    if (!document.hidden && !paused) tickHeldKeys(dt);
     for (const b of boards) if (b.live) b.tick(dt);
     const mine = boards.find(b => b.live);
     if (mine) updateMusicIntensity(mine);
@@ -2384,12 +2846,16 @@
     ended = true;
     clearCountdown();
     matchPhase = 'post';
+    paused = false;
+    hide($('pause'));
     const winner = alive[0];
     if (winner) {
       broadcastOrLocal({t: 'win', id: winner.id});
       applyWin(winner.id);
     } else {
-      showBanner(t('draw'), 'lose');
+      const title = roster.length <= 1 ? t('gameOver') : t('draw');
+      showBanner(title, 'lose');
+      showResults(title);
       showRematchBtn();
       startPostHeartbeat();
     }
@@ -2411,18 +2877,24 @@
     ended = true;
     clearCountdown();
     matchPhase = 'post';
+    paused = false;
+    hide($('pause'));
     roster.forEach(p => { p.ready = false; });
+    let title;
     if (winnerId === myId) {
-      showBanner(t('victory'), 'win');
+      title = t('victory');
+      showBanner(title, 'win');
       burstFireworks();
       sfx('win');
     } else {
       const w = roster.find(p => p.id === winnerId);
-      showBanner(t('wins', {name: w?.name || t('defaultName')}), 'lose');
+      title = t('wins', {name: w?.name || t('defaultName')});
+      showBanner(title, 'lose');
       sfx('gameover');
     }
     const a = audio();
     if (a) a.stopMusic(700);
+    showResults(title);
     showRematchBtn();
     updateRematchHint();
     startPostHeartbeat();
@@ -2432,6 +2904,11 @@
     btnAgain.textContent = t('playAgain');
     btnAgain.disabled = false;
     show(btnAgain);
+    const btnResultsAgain = $('btnResultsAgain');
+    if (btnResultsAgain) {
+      btnResultsAgain.textContent = t('playAgain');
+      btnResultsAgain.disabled = false;
+    }
   }
 
   function showBanner(text, cls) {
@@ -2450,14 +2927,17 @@
   }
 
   function updateRematchHint() {
-    const hint = $('rematchHint');
-    if (!hint) return;
     const readyN = roster.filter(p => p.ready).length;
     const n = roster.length;
-    if (n && readyN >= n) hint.textContent = t('rematchStart');
-    else if (roster.find(p => p.id === myId)?.ready) hint.textContent = t('rematchWait', {ready: readyN, n});
-    else if (readyN) hint.textContent = t('rematchPartial', {ready: readyN, n});
-    else hint.textContent = t('rematchAll');
+    let text;
+    if (n && readyN >= n) text = t('rematchStart');
+    else if (roster.find(p => p.id === myId)?.ready) text = t('rematchWait', {ready: readyN, n});
+    else if (readyN) text = t('rematchPartial', {ready: readyN, n});
+    else text = t('rematchAll');
+    const hint = $('rematchHint');
+    if (hint) hint.textContent = text;
+    const resultsHint = $('resultsHint');
+    if (resultsHint) resultsHint.textContent = text;
   }
 
   function rematch() {
@@ -2467,6 +2947,11 @@
     me.ready = true;
     btnAgain.disabled = true;
     btnAgain.textContent = t('ready');
+    const btnResultsAgain = $('btnResultsAgain');
+    if (btnResultsAgain) {
+      btnResultsAgain.disabled = true;
+      btnResultsAgain.textContent = t('ready');
+    }
     netSend({t: 'rematch', from: myId});
     updateRematchHint();
     if (mode === 'host') {
@@ -3811,7 +4296,7 @@
   }
 
   function act(action) {
-    if (matchPhase !== 'playing' || ended || eliminated) return;
+    if (matchPhase !== 'playing' || ended || eliminated || paused) return;
     const b = boards.find(x => x.live);
     if (!b) return;
     if (action === 'left') b.move(-1);
@@ -3824,68 +4309,50 @@
     else if (action === 'power') b.usePower();
   }
 
-  document.addEventListener('keydown', e => {
-    if (matchPhase !== 'playing' || ended || eliminated) return;
-    // Don't steal typing from name/code fields
-    const tag = (e.target && e.target.tagName) || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
-    const k = e.key;
-    if (k === 'a' || k === 'A' || k === 'ArrowLeft') {
-      if (e.repeat) { e.preventDefault(); return; }
-      pressHorz(-1);
+  function dispatchBindAction(action, e) {
+    if (action === 'pause') {
+      if (e.repeat) return;
+      if (matchPhase === 'playing' && !ended) {
+        togglePause();
+        e.preventDefault();
+      }
+      return;
+    }
+    if (matchPhase !== 'playing' || ended || eliminated || paused) return;
+    if (e.repeat && (action === 'left' || action === 'right' || action === 'soft' || action === 'hard' || action === 'rotCw' || action === 'rotCcw' || action === 'hold' || action === 'power')) {
       e.preventDefault();
       return;
     }
-    if (k === 'd' || k === 'D' || k === 'ArrowRight') {
-      if (e.repeat) { e.preventDefault(); return; }
-      pressHorz(1);
-      e.preventDefault();
-      return;
-    }
-    if (k === 's' || k === 'S' || k === 'ArrowDown') {
-      if (e.repeat) { e.preventDefault(); return; }
+    if (action === 'left') pressHorz(-1);
+    else if (action === 'right') pressHorz(1);
+    else if (action === 'soft') {
       held.soft = true;
-      softAcc = SOFT_MS; // soft once immediately
+      softAcc = SOFT_MS;
+    } else act(action);
+    e.preventDefault();
+  }
+
+  document.addEventListener('keydown', e => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    if (bindListenAction) {
       e.preventDefault();
+      if (e.repeat) return;
+      applyBindCapture(e.code);
       return;
     }
-    if (k === 'w' || k === 'W' || k === 'ArrowUp' || k === 'x' || k === 'X') {
-      if (e.repeat) { e.preventDefault(); return; }
-      act('rotCw');
-      e.preventDefault();
-      return;
-    }
-    if (k === 'z' || k === 'Z') {
-      if (e.repeat) { e.preventDefault(); return; }
-      act('rotCcw');
-      e.preventDefault();
-      return;
-    }
-    if (k === ' ') {
-      if (e.repeat) { e.preventDefault(); return; }
-      act('hard');
-      e.preventDefault();
-      return;
-    }
-    if (k === 'c' || k === 'C') {
-      if (e.repeat) { e.preventDefault(); return; }
-      act('hold');
-      e.preventDefault();
-      return;
-    }
-    if (k === 'v' || k === 'V') {
-      if (e.repeat) { e.preventDefault(); return; }
-      act('power');
-      e.preventDefault();
-    }
+
+    const action = actionForCode(e.code);
+    if (!action) return;
+    dispatchBindAction(action, e);
   });
 
   document.addEventListener('keyup', e => {
-    const k = e.key;
-    if (k === 'a' || k === 'A' || k === 'ArrowLeft') releaseHorz(-1);
-    else if (k === 'd' || k === 'D' || k === 'ArrowRight') releaseHorz(1);
-    else if (k === 's' || k === 'S' || k === 'ArrowDown') {
+    const action = actionForCode(e.code);
+    if (action === 'left') releaseHorz(-1);
+    else if (action === 'right') releaseHorz(1);
+    else if (action === 'soft') {
       held.soft = false;
       softAcc = 0;
     }
@@ -3932,7 +4399,29 @@
   $('btnHost').onclick = menuClick(() => openNetUI('host'));
   $('btnJoin').onclick = menuClick(() => openNetUI('guest'));
   if ($('btnSettings')) $('btnSettings').onclick = menuClick(showSettings);
-  if ($('btnSettingsBack')) $('btnSettingsBack').onclick = menuClick(showMenu);
+  if ($('btnSettingsBack')) $('btnSettingsBack').onclick = menuClick(leaveSettings);
+  if ($('btnResume')) $('btnResume').onclick = menuClick(resumeGame);
+  if ($('btnPauseSettings')) $('btnPauseSettings').onclick = menuClick(showSettings);
+  if ($('btnPauseMenu')) $('btnPauseMenu').onclick = menuClick(showMenu);
+  if ($('btnResultsAgain')) $('btnResultsAgain').onclick = menuClick(rematch);
+  if ($('btnResultsMenu')) $('btnResultsMenu').onclick = menuClick(showMenu);
+  if ($('btnResetBinds')) {
+    $('btnResetBinds').onclick = menuClick(() => {
+      setBinds({ ...DEFAULT_BINDS });
+    });
+  }
+  const chkColorblind = $('chkColorblind');
+  if (chkColorblind) {
+    chkColorblind.checked = colorblindEnabled;
+    chkColorblind.addEventListener('change', () => setColorblind(chkColorblind.checked));
+  }
+  const rngGrid = $('rngGrid');
+  if (rngGrid) {
+    rngGrid.addEventListener('input', () => {
+      if ($('outGrid')) $('outGrid').textContent = rngGrid.value;
+    });
+    rngGrid.addEventListener('change', () => setGridOpacity(parseInt(rngGrid.value, 10) || 0));
+  }
   [['rngDas', 'outDas'], ['rngArr', 'outArr'], ['rngSoft', 'outSoft']].forEach(([rngId, outId]) => {
     const rng = $(rngId), out = $(outId);
     if (!rng) return;
