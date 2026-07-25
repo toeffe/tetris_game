@@ -231,7 +231,7 @@
       volMaster: 'Master',
       volMusic: 'Music',
       volSfx: 'SFX',
-      audioHint: 'Music and SFX are synthesized in-browser (no downloads).',
+      audioHint: 'Background music from audio/bgm.mp3 · SFX are synthesized in-browser.',
       mute: 'Mute',
       unmute: 'Sound',
       muteToggle: 'Mute audio',
@@ -348,7 +348,7 @@
       volMaster: 'Master',
       volMusic: 'Musik',
       volSfx: 'Effekter',
-      audioHint: 'Musik og lydeffekter genereres i browseren (ingen downloads).',
+      audioHint: 'Baggrundsmusik fra audio/bgm.mp3 · lydeffekter genereres i browseren.',
       mute: 'Lyd fra',
       unmute: 'Lyd',
       muteToggle: 'Slå lyd fra',
@@ -3975,7 +3975,10 @@
       a.resume().then(() => {
         a.toggleMute();
         syncMuteBtn();
-        if (!a.isMuted()) sfx('menu');
+        if (!a.isMuted()) {
+          sfx('menu');
+          if (matchPhase === 'playing' && !ended) a.startMusic();
+        }
       });
     };
   }

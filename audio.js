@@ -1,10 +1,10 @@
-/* VibeTrisimo — Web Audio engine (procedural SFX + layered music)
- * No external samples: dungeon-toned synthesis, licensing-safe. */
+/* VibeTrisimo — Web Audio engine (procedural SFX + looped BGM bed) */
 (() => {
   const MASTER_KEY = 'vibetrisimo-vol-master';
   const MUSIC_KEY = 'vibetrisimo-vol-music';
   const SFX_KEY = 'vibetrisimo-vol-sfx';
   const MUTE_KEY = 'vibetrisimo-mute';
+  const BGM_URL = './audio/bgm.mp3';
 
   function clamp(n, lo, hi) {
     return Math.max(lo, Math.min(hi, n));
@@ -38,17 +38,17 @@
   let muted = storageGet(MUTE_KEY) === '1';
 
   let musicOn = false;
-  let musicLayers = null;
-  let musicScheduler = null;
-  let musicStep = 0;
-  let nextNoteTime = 0;
+  let musicStarting = false;
+  let musicSource = null;
+  let musicFilter = null;
+  let musicBedGain = null;
+  let bgmBuffer = null;
+  let bgmLoad = null;
   let intensity = 0; // 0..1
   let targetIntensity = 0;
+  let intensityTimer = null;
   let duckUntil = 0;
   let unlocked = false;
-
-  const LOOKAHEAD = 0.12;
-  const STEP_SEC_BASE = 60 / 98 / 2; // 8th notes @ ~98bpm
 
   function ensureCtx() {
     if (ctx) return ctx;
@@ -265,148 +265,122 @@
     try { fn(arg); } catch (_) {}
   }
 
-  /* ---------- Layered music (drone + pulse + percussion + tension) ---------- */
-  function createMusicLayers() {
-    const t0 = now();
-
-    // Layer A — low dungeon drone
-    const drone = ctx.createOscillator();
-    drone.type = 'sine';
-    drone.frequency.value = 73.42; // D2
-    const drone2 = ctx.createOscillator();
-    drone2.type = 'triangle';
-    drone2.frequency.value = 110; // A2
-    const droneGain = ctx.createGain();
-    droneGain.gain.value = 0.12;
-    const droneFilter = ctx.createBiquadFilter();
-    droneFilter.type = 'lowpass';
-    droneFilter.frequency.value = 420;
-    drone.connect(droneFilter);
-    drone2.connect(droneFilter);
-    droneFilter.connect(droneGain);
-    droneGain.connect(musicBus);
-    drone.start(t0);
-    drone2.start(t0);
-
-    // Layer B — soft pulse (heartbeat pad)
-    const pulse = ctx.createOscillator();
-    pulse.type = 'sine';
-    pulse.frequency.value = 146.83; // D3
-    const pulseGain = ctx.createGain();
-    pulseGain.gain.value = 0.0001;
-    pulse.connect(pulseGain);
-    pulseGain.connect(musicBus);
-    pulse.start(t0);
-
-    // Layer C/D gains — fed by scheduled hits
-    const percGain = ctx.createGain();
-    percGain.gain.value = 0.0001;
-    percGain.connect(musicBus);
-    const tenseGain = ctx.createGain();
-    tenseGain.gain.value = 0.0001;
-    tenseGain.connect(musicBus);
-
-    return { drone, drone2, droneGain, droneFilter, pulse, pulseGain, percGain, tenseGain };
-  }
-
-  function stopMusicLayers() {
-    if (!musicLayers) return;
-    const t0 = now();
-    try {
-      musicLayers.drone.stop(t0 + 0.05);
-      musicLayers.drone2.stop(t0 + 0.05);
-      musicLayers.pulse.stop(t0 + 0.05);
-    } catch (_) {}
-    musicLayers = null;
-  }
-
-  function schedulePerc(time, strong) {
-    if (!musicLayers) return;
-    const peak = (0.04 + intensity * 0.07) * (strong ? 1.35 : 0.75);
-    noiseBurst(musicLayers.percGain, time, strong ? 0.08 : 0.05, peak, strong ? 180 : 420, 0.6);
-    if (intensity > 0.35) {
-      osc('sine', strong ? 55 : 70, musicLayers.percGain, time, 0.1, peak * 0.8, {
-        a: 0.002, d: 0.05, s: 0.2, r: 0.08, slide: 35,
+  /* ---------- Looped BGM bed (./audio/bgm.mp3) ---------- */
+  function loadBgm() {
+    if (bgmBuffer) return Promise.resolve(bgmBuffer);
+    if (bgmLoad) return bgmLoad;
+    if (!ensureCtx()) return Promise.reject(new Error('no audio'));
+    bgmLoad = fetch(BGM_URL)
+      .then((r) => {
+        if (!r.ok) throw new Error('bgm fetch failed');
+        return r.arrayBuffer();
+      })
+      .then((buf) => ctx.decodeAudioData(buf.slice(0)))
+      .then((decoded) => {
+        bgmBuffer = decoded;
+        return bgmBuffer;
+      })
+      .catch((err) => {
+        bgmLoad = null;
+        throw err;
       });
+    return bgmLoad;
+  }
+
+  function stopMusicSource(fadeMs) {
+    if (intensityTimer) {
+      clearInterval(intensityTimer);
+      intensityTimer = null;
+    }
+    const src = musicSource;
+    const bed = musicBedGain;
+    musicSource = null;
+    musicFilter = null;
+    musicBedGain = null;
+    if (!src || !ctx) return;
+    const t0 = now();
+    const fade = Math.max(0.05, (fadeMs || 400) / 1000);
+    try {
+      if (bed) {
+        bed.gain.cancelScheduledValues(t0);
+        bed.gain.setValueAtTime(Math.max(0.0001, bed.gain.value), t0);
+        bed.gain.exponentialRampToValueAtTime(0.0001, t0 + fade);
+      }
+      src.stop(t0 + fade + 0.02);
+    } catch (_) {
+      try { src.stop(); } catch (_) {}
     }
   }
 
-  function scheduleTension(time, step) {
-    if (!musicLayers || intensity < 0.25) return;
-    const scale = [146.83, 174.61, 196, 220, 261.63]; // D minor-ish
-    const idx = [0, 2, 3, 2, 4, 3, 1, 0][step % 8];
-    const f = scale[idx] * (intensity > 0.7 && step % 4 === 0 ? 2 : 1);
-    const peak = 0.015 + intensity * 0.035;
-    osc('triangle', f, musicLayers.tenseGain, time, 0.12, peak, {
-      a: 0.01, d: 0.06, s: 0.25, r: 0.1,
-    });
+  function applyIntensityToBed() {
+    if (!musicOn || !musicFilter || !musicBedGain || !ctx) return;
+    intensity += (targetIntensity - intensity) * 0.1;
+    const t = now();
+    // Open the bed slightly as the stack rises — still the same track
+    musicFilter.frequency.setTargetAtTime(2200 + intensity * 4800, t, 0.25);
+    musicBedGain.gain.setTargetAtTime(0.78 + intensity * 0.22, t, 0.2);
   }
 
-  function musicSchedulerTick() {
-    if (!musicOn || !ctx || !musicLayers) return;
-    const cur = now();
-    // Smooth intensity
-    intensity += (targetIntensity - intensity) * 0.08;
+  function startMusicSource(buffer) {
+    if (!ensureCtx() || ctx.state !== 'running' || musicOn) return;
+    stopMusicSource(0);
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    // Seamless-ish loop; if the file has silence at ends, trim externally later
+    src.loopStart = 0;
+    src.loopEnd = buffer.duration;
 
-    // Layer gains track intensity
-    const pulseDepth = 0.02 + intensity * 0.05;
-    const pulseRate = 1.6 + intensity * 1.4;
-    const g = musicLayers.pulseGain.gain;
-    // gentle tremolo via scheduled values
-    const t = cur;
-    g.setTargetAtTime(0.0001 + pulseDepth * (0.5 + 0.5 * Math.sin(t * pulseRate * Math.PI * 2)), t, 0.05);
-    musicLayers.percGain.gain.setTargetAtTime(0.5 + intensity * 0.9, t, 0.1);
-    musicLayers.tenseGain.gain.setTargetAtTime(intensity > 0.2 ? 0.7 + intensity * 0.6 : 0.0001, t, 0.12);
-    musicLayers.droneFilter.frequency.setTargetAtTime(380 + intensity * 520, t, 0.2);
-    musicLayers.droneGain.gain.setTargetAtTime(0.1 + intensity * 0.06, t, 0.15);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 2200 + targetIntensity * 4800;
+    filter.Q.value = 0.5;
 
-    const stepDur = STEP_SEC_BASE * (1 - intensity * 0.18);
-    while (nextNoteTime < cur + LOOKAHEAD) {
-      const strong = musicStep % 4 === 0;
-      if (intensity > 0.12 || strong) schedulePerc(nextNoteTime, strong);
-      scheduleTension(nextNoteTime, musicStep);
-      nextNoteTime += stepDur;
-      musicStep++;
-    }
+    const bed = ctx.createGain();
+    bed.gain.value = 0.0001;
+
+    src.connect(filter);
+    filter.connect(bed);
+    bed.connect(musicBus);
+
+    const t0 = now();
+    bed.gain.setValueAtTime(0.0001, t0);
+    bed.gain.exponentialRampToValueAtTime(0.78 + targetIntensity * 0.22, t0 + 0.55);
+
+    src.start(t0);
+    musicSource = src;
+    musicFilter = filter;
+    musicBedGain = bed;
+    musicOn = true;
+    intensity = targetIntensity;
+    if (intensityTimer) clearInterval(intensityTimer);
+    intensityTimer = setInterval(applyIntensityToBed, 80);
+    src.onended = () => {
+      if (musicSource === src) {
+        musicOn = false;
+        musicSource = null;
+      }
+    };
   }
 
   function startMusic() {
-    if (!ensureCtx() || musicOn) return;
+    if (!ensureCtx() || musicOn || musicStarting || muted) return;
     if (ctx.state !== 'running') return;
-    stopMusicLayers();
-    musicLayers = createMusicLayers();
-    musicOn = true;
-    musicStep = 0;
-    nextNoteTime = now() + 0.05;
-    intensity = targetIntensity;
-    if (musicScheduler) clearInterval(musicScheduler);
-    musicScheduler = setInterval(musicSchedulerTick, 25);
-    musicSchedulerTick();
+    musicStarting = true;
+    loadBgm()
+      .then((buf) => {
+        if (!musicOn && ctx && ctx.state === 'running' && !muted) startMusicSource(buf);
+      })
+      .catch(() => {
+        // Keep game playable if the file fails to load
+      })
+      .then(() => { musicStarting = false; });
   }
 
   function stopMusic(fadeMs) {
-    if (!musicOn && !musicLayers) return;
+    if (!musicOn && !musicSource) return;
     musicOn = false;
-    if (musicScheduler) {
-      clearInterval(musicScheduler);
-      musicScheduler = null;
-    }
-    if (musicLayers && ctx) {
-      const t0 = now();
-      const fade = (fadeMs || 400) / 1000;
-      try {
-        musicLayers.droneGain.gain.setTargetAtTime(0.0001, t0, fade / 3);
-        musicLayers.pulseGain.gain.setTargetAtTime(0.0001, t0, fade / 3);
-        musicLayers.percGain.gain.setTargetAtTime(0.0001, t0, fade / 3);
-        musicLayers.tenseGain.gain.setTargetAtTime(0.0001, t0, fade / 3);
-      } catch (_) {}
-      const layers = musicLayers;
-      setTimeout(() => {
-        if (musicLayers === layers) stopMusicLayers();
-      }, (fadeMs || 400) + 50);
-    } else {
-      stopMusicLayers();
-    }
+    stopMusicSource(fadeMs);
   }
 
   function setIntensity(v) {
