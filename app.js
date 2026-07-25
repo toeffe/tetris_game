@@ -386,7 +386,6 @@
   /* ---------- stage FX: shake / hit-stop / level theme ---------- */
   let hitStopLeft = 0;
   let shakeState = { mag: 0, until: 0, dur: 160, phase: 0 };
-  let stageParallax = { x: 0, y: 0 };
 
   function triggerHitStop(ms) {
     if (!fxMotionOk()) return;
@@ -395,12 +394,12 @@
 
   function triggerShake(intensity) {
     if (!shakeEnabled || !fxMotionOk()) return;
-    // Keep kicks small — random high-mag shake reads as lag
-    const mag = Math.min(7, Math.max(0, intensity) * 0.55);
-    if (mag < 0.8) return;
-    if (mag >= shakeState.mag * 0.75 || performance.now() > shakeState.until) {
+    // Peak px on the board (not the wallpaper). Readable without feeling laggy.
+    const mag = Math.min(9, Math.max(0, intensity) * 1.15);
+    if (mag < 1.5) return;
+    if (mag >= shakeState.mag * 0.65 || performance.now() > shakeState.until) {
       shakeState.mag = mag;
-      shakeState.dur = 120 + mag * 14;
+      shakeState.dur = 150 + mag * 10;
       shakeState.until = performance.now() + shakeState.dur;
       shakeState.phase = Math.random() * Math.PI * 2;
     }
@@ -424,28 +423,25 @@
     root.style.setProperty('--torch-cool', theme.cool);
     root.style.setProperty('--well-glow', theme.glow);
 
-    if (fxMotionOk()) {
-      stageParallax.x = Math.sin(now / 9000) * (5 + level * 0.35) + Math.sin(now / 2300) * 1.2;
-      stageParallax.y = Math.cos(now / 12000) * (4 + level * 0.25) + Math.cos(now / 3100) * 0.9;
-    } else {
-      stageParallax.x = 0;
-      stageParallax.y = 0;
-    }
+    // Keep the chamber art locked — idle parallax felt like constant drift/shake.
+    stage.style.backgroundPosition = 'center, center, center center';
+    stage.style.transform = '';
 
     let tx = 0, ty = 0;
     if (shakeEnabled && shakeState.until > now) {
       const p = Math.max(0, (shakeState.until - now) / shakeState.dur);
-      // Smooth damped sine — not per-frame random jitter
-      const m = shakeState.mag * p * p;
-      const t = (1 - p) * 18 + shakeState.phase;
-      tx = Math.sin(t * 1.7) * m;
-      ty = Math.cos(t * 2.3) * m * 0.55;
+      // Ease-out: strong at impact, settles quickly
+      const m = shakeState.mag * p;
+      const t = (1 - p) * 22 + shakeState.phase;
+      tx = Math.sin(t * 2.0) * m;
+      ty = Math.cos(t * 2.6) * m * 0.45;
     }
-    stage.style.backgroundPosition =
-      'center, center, calc(50% + ' + stageParallax.x.toFixed(2) + 'px) calc(48% + ' + stageParallax.y.toFixed(2) + 'px)';
-    stage.style.transform = 'translate3d(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px,0)';
     const host = stage.querySelector('.player.board-host');
-    if (host) host.style.transform = '';
+    if (host) {
+      host.style.transform = (tx || ty)
+        ? 'translate3d(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px,0)'
+        : '';
+    }
   }
 
   function t(key, vars) {
@@ -1283,11 +1279,12 @@
         this.flashUntil = performance.now() + 200;
         this.flashKind = 'clear';
         showClearFx(this, cleared, tSpin, b2bAwarded);
-        // Light camera kick — reserve weight for Tetris / T-spins
-        const impact = tSpin >= 2 ? 6 + cleared : (cleared >= 4 ? 7 : cleared >= 3 ? 4 : cleared >= 2 ? 2.5 : 0);
-        if (impact) triggerShake(impact);
-        if (cleared >= 4 || tSpin >= 2) triggerHitStop(45);
-        else if (cleared >= 3) triggerHitStop(28);
+        // Board kick: singles light, Tetris / T-spin solid (wallpaper stays still)
+        const impact = tSpin >= 2 ? 5.5 + cleared * 0.8
+          : (cleared >= 4 ? 6.5 : cleared >= 3 ? 4.2 : cleared >= 2 ? 3 : 2);
+        triggerShake(impact);
+        if (cleared >= 4 || tSpin >= 2) triggerHitStop(40);
+        else if (cleared >= 3) triggerHitStop(24);
         pendingGarbage = this.gQueue;
         this.gQueue = 0;
         this.beginClearAnim(fullRows, pendingGarbage);
