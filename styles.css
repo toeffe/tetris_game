@@ -26,7 +26,7 @@
   --blood:#a84848;
   --emerald:#6a9a5a;
   --text:#f0e6d0;
-  --muted:#a89878;
+  --muted:#b5a584;
   --parchment:#e8d9b5;
   --ink:#2a1f12;
   --iron:#4a453f;
@@ -70,6 +70,11 @@
 }
 
 *{box-sizing:border-box;}
+html{
+  /* Scale chrome UI above ~1080p via the shorter viewport side (vmin).
+     ~16px at 1080p, ~18px at 1440p, capped ~22px on 4K — playfield sizing stays in JS. */
+  font-size:clamp(16px, calc(10px + 0.55vmin), 22px);
+}
 html,body{height:100%;}
 body{
   margin:0;
@@ -215,7 +220,7 @@ body.in-game #atmosphere .vignette{
   cursor:pointer;
   user-select:none;
   font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-  font-size:11px;
+  font-size:.6875rem;
   font-weight:700;
   letter-spacing:.08em;
   text-transform:uppercase;
@@ -258,7 +263,7 @@ body.in-game #atmosphere .vignette{
 }
 .mute-btn .mute-label{
   font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-  font-size:10px;
+  font-size:.625rem;
   font-weight:700;
   letter-spacing:.08em;
   text-transform:uppercase;
@@ -346,7 +351,7 @@ body.in-game #atmosphere .vignette{
   z-index:30;
   margin:0 !important;
   margin-top:0 !important;
-  width:min(400px,92vw);
+  width:min(25rem,92vw);
   animation:overlay-enter .45s var(--ease-out) both;
 }
 .panel.overlay-panel[hidden],
@@ -488,7 +493,7 @@ body.in-game .subtitle{display:none;}
 /* Stone tablet — sits in the lobby chamber like furniture */
 .panel,
 .stone-tablet{
-  width:min(380px,100%);
+  width:min(23.75rem,100%);
   padding:26px 22px 22px;
   position:relative;
   margin-top:clamp(4vh, 8vh, 12vh);
@@ -644,7 +649,7 @@ body.in-game .subtitle{display:none;}
   color:var(--gold) !important;
 }
 .lobby-panel{
-  width:min(420px,100%);
+  width:min(26.25rem,100%);
   padding:18px 18px 14px;
   box-sizing:border-box;
 }
@@ -716,7 +721,7 @@ body.in-game .subtitle{display:none;}
 }
 .lobby-settings-body .setting-row{
   margin:8px 0;
-  font-size:13px;
+  font-size:.8125rem;
   gap:8px;
 }
 .lobby-settings-body .setting-row span{
@@ -864,7 +869,7 @@ input#netIn:focus{
   margin:12px 0 0;
   color:var(--muted);
   font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-  font-size:13px;
+  font-size:.8125rem;
   font-weight:500;
   line-height:1.6;
   text-align:center;
@@ -1006,7 +1011,7 @@ body.in-game #game{
   gap:8px;
   align-content:flex-end;
   align-items:flex-end;
-  max-width:min(280px, 22vw);
+  max-width:min(17.5rem, 22vw);
   pointer-events:none;
 }
 .boards.multi .opps .player{
@@ -1029,9 +1034,9 @@ body.in-game #game > .hint{
   transform:translateX(-50%);
   z-index:6;
   margin:0;
-  width:min(920px, 92vw);
+  width:min(57.5rem, 92vw);
   padding:6px 14px;
-  font-size:11px;
+  font-size:.6875rem;
   color:rgba(236,228,208,.88);
   text-shadow:0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.8);
   background:linear-gradient(90deg, transparent, rgba(8,6,4,.72) 14%, rgba(8,6,4,.72) 86%, transparent);
@@ -1230,7 +1235,7 @@ body.in-game #ctrlHint:has(+ #btnAgain:not([hidden])){
 .alcove-next{order:2; align-self:flex-start; margin-top:8px;}
 .alcove .mini-label{
   font-family:var(--font-body);
-  font-size:9px;
+  font-size:.5625rem;
   font-weight:600;
   color:rgba(220,195,140,.78);
   letter-spacing:.16em;
@@ -1393,7 +1398,7 @@ canvas{
 }
 .mini-label{
   font-family:var(--font-body);
-  font-size:11px;
+  font-size:.6875rem;
   font-weight:600;
   color:#c8b890;
   letter-spacing:.1em;
@@ -1461,7 +1466,7 @@ canvas{
 .meta{
   margin-top:3px;
   font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-  font-size:12px;
+  font-size:.75rem;
   font-weight:500;
   color:var(--muted);
   letter-spacing:.02em;
@@ -1470,7 +1475,7 @@ canvas{
 }
 .over{margin-top:4px;min-height:1em;color:#e06060;font-weight:700;font-size:.7rem;letter-spacing:.06em;}
 
-#game > button{width:auto;min-width:160px;margin:10px 6px 0;}
+#game > button{width:auto;min-width:10rem;margin:10px 6px 0;}
 
 #countdown{
   position:fixed;
@@ -1807,7 +1812,7 @@ canvas{
   justify-content:space-between;
   gap:12px;
   font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-  font-size:14px;
+  font-size:.875rem;
   font-weight:600;
   color:var(--parchment);
   margin:6px 0;
@@ -1845,7 +1850,7 @@ canvas{
   align-items:center;
   margin:10px 0;
   font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-  font-size:13px;
+  font-size:.8125rem;
   font-weight:600;
   color:var(--parchment);
 }
@@ -1875,7 +1880,7 @@ canvas{
   gap:10px;
   margin:12px 0 4px;
   font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-  font-size:13px;
+  font-size:.8125rem;
   font-weight:600;
   color:var(--parchment);
   cursor:pointer;
