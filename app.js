@@ -212,7 +212,7 @@
       peerLeftLobby: '{name} left the lobby',
       joinRetry: 'Retry',
       offline: 'Offline',
-      copyCode: 'Copy code',
+      copyCode: 'Copy invite',
       codePh: 'Code',
       join: 'Join',
       back: 'Back',
@@ -348,8 +348,8 @@
       needCode: 'Need a 5-character code.',
       connecting: 'Connecting…',
       joinFail: 'Join failed ({err}).',
-      codeCopied: 'Code copied.',
-      copyFail: 'Copy failed — share the code manually.',
+      codeCopied: 'Invite copied.',
+      copyFail: 'Copy failed — share the invite manually.',
       err: 'error',
     },
     da: {
@@ -403,7 +403,7 @@
       peerLeftLobby: '{name} forlod lobbyen',
       joinRetry: 'Prøv igen',
       offline: 'Offline',
-      copyCode: 'Kopiér kode',
+      copyCode: 'Kopiér invitation',
       codePh: 'Kode',
       join: 'Tilslut',
       back: 'Tilbage',
@@ -539,8 +539,8 @@
       needCode: 'Brug en kode på 5 tegn.',
       connecting: 'Forbinder…',
       joinFail: 'Tilslutning mislykkedes ({err}).',
-      codeCopied: 'Kode kopieret.',
-      copyFail: 'Kopiering mislykkedes — del koden manuelt.',
+      codeCopied: 'Invitation kopieret.',
+      copyFail: 'Kopiering mislykkedes — del invitationen manuelt.',
       err: 'fejl',
     },
   };
@@ -5612,12 +5612,28 @@
   }
   applyI18n();
 
-  // ?lobby=CODE is for share links only — never auto-resume a Peer session on refresh.
+  // Share links (?lobby=) auto-join. Hard refresh does not — Peer sessions die on reload.
   (function bootLobbyFromUrl() {
     const code = getLobbyUrlCode();
     if (!code) return;
-    setLobbyUrl(null);
+    let navType = 'navigate';
+    try {
+      const nav = performance.getEntriesByType('navigation')[0];
+      if (nav && nav.type) navType = nav.type;
+    } catch (_) {}
+    if (navType === 'reload') {
+      setLobbyUrl(null);
+      return;
+    }
     pendingLobbyInvite = code;
-    setTimeout(() => flashMenuStatus(t('lobbyLinkHint', {code})), 80);
+    setTimeout(() => {
+      const wasHost = storageGet(SESSION_HOST_KEY) === code;
+      if (wasHost) {
+        openNetUI('host', code);
+        return;
+      }
+      openNetUI('guest', code);
+      joinRoom();
+    }, 50);
   })();
 })();
