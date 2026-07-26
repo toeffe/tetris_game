@@ -3795,11 +3795,21 @@
     connections.delete(peerId);
     postLastSeen.delete(peerId);
     roster = roster.filter(p => p.id !== peerId);
+    afterPostPeerRemoved();
+    return true;
+  }
+
+  /** Host post-match: if nobody else remains, soft-return to lobby; else continue rematch voting. */
+  function afterPostPeerRemoved() {
+    if (mode !== 'host' || matchPhase !== 'post') return;
+    const others = roster.filter(p => p.id !== myId && p.connected !== false);
+    if (!others.length) {
+      returnToLobbySession();
+      return;
+    }
     broadcastRoster();
     updateRematchHint();
-    // Remaining players who already clicked Play again can start without the leaver.
     tryHostStart();
-    return true;
   }
 
   function tickPostHeartbeat() {
@@ -4814,9 +4824,7 @@
         markDead(fromId);
         checkWinner();
       } else if (matchPhase === 'post') {
-        updateRematchHint();
-        broadcastRoster();
-        tryHostStart();
+        afterPostPeerRemoved();
       } else {
         if ($('lobbyStatus')) $('lobbyStatus').textContent = t('peerLeftLobby', {name: leftName});
         broadcastRoster();
