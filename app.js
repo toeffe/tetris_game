@@ -53,7 +53,9 @@
   const GARBAGE = {1:0,2:1,3:2,4:4};
   const TIME_LEVEL_MS = 30000; // level up every 30s of play, in addition to line-based leveling
   const MIN_DROP_MS = 40; // fastest possible drop interval (ninja base)
-  const LEVEL_DROP_STEP_MS = 15; // how much each level shortens the drop interval
+  const MIN_SOFT_MS = 8; // floor for soft-drop repeat when gravity is very fast
+  // Per-level gravity multiplier toward MIN_DROP_MS (L1=1, L10≈0.15, L14≈0.06 on normal).
+  const GRAVITY_DECAY = 0.82;
   const DROP_SPEED = { slow: 1400, normal: 1000, fast: 400, turbo: 160, insane: 80, ninja: 40 };
   // Lock slide scales with gravity: ~50% of current dropMs, with a floor so
   // fast/turbo/insane/ninja still allow a readable slide before lock.
@@ -1414,8 +1416,9 @@
         this.visSnap = false;
         return;
       }
-      // Frame-rate independent easing — readable on 60Hz and 144Hz
-      const k = 1 - Math.exp(-dt / PIECE_LERP_MS);
+      // Faster gravity → snappier lerp so the eye keeps up with real dropMs.
+      const lerpMs = Math.min(PIECE_LERP_MS, Math.max(16, (this.dropMs || PIECE_LERP_MS) * 0.5));
+      const k = 1 - Math.exp(-dt / lerpMs);
       this.visX += (this.piece.x - this.visX) * k;
       this.visY += (this.piece.y - this.visY) * k;
       if (Math.abs(this.visX - this.piece.x) < 0.015) this.visX = this.piece.x;
@@ -1855,15 +1858,19 @@
       if (this.updateSpeed()) this.paintHud();
       else if (playMode === 'ultra') this.paintHud();
       this.acc += dt;
-      if (this.acc >= this.dropMs) {
-        this.acc = 0;
-        if (!this.grounded()) {
-          this.piece.y++;
-          this.lockAcc = 0;
-          this.lastAction = 'drop';
-          syncState(this);
+      let dropped = false;
+      while (this.acc >= this.dropMs) {
+        this.acc -= this.dropMs;
+        if (this.grounded()) {
+          this.acc = 0;
+          break;
         }
+        this.piece.y++;
+        this.lockAcc = 0;
+        this.lastAction = 'drop';
+        dropped = true;
       }
+      if (dropped) syncState(this);
       if (this.grounded()) {
         this.lockAcc += dt;
         if (this.lockAcc >= this.lockDelayMs()) this.lock();
@@ -1881,7 +1888,8 @@
       const changed = level !== this.level;
       this.level = level;
       const baseDropMs = DROP_SPEED[dropSpeed] || DROP_SPEED.normal;
-      let dropMs = Math.max(MIN_DROP_MS, baseDropMs - (level - 1) * LEVEL_DROP_STEP_MS);
+      const lv = Math.max(1, level | 0);
+      let dropMs = Math.max(MIN_DROP_MS, Math.round(baseDropMs * Math.pow(GRAVITY_DECAY, lv - 1)));
       if (this.torchUntil && performance.now() < this.torchUntil) {
         dropMs = Math.max(MIN_DROP_MS, dropMs / 2);
       } else {
@@ -5331,6 +5339,13 @@
     }
   }
 
+  function softDropInterval(board) {
+    // Soft drop must speed up with gravity — a fixed SOFT_MS hides level changes
+    // for anyone who holds soft drop (most of the time).
+    const g = (board && board.dropMs) || DROP_SPEED.normal;
+    return Math.max(MIN_SOFT_MS, Math.min(SOFT_MS, Math.round(g / 12)));
+  }
+
   function tickHeldKeys(dt) {
     if (shiftDir) {
       shiftAcc += dt;
@@ -5351,9 +5366,11 @@
       }
     }
     if (held.soft) {
+      const board = boards.find(x => x.live);
+      const softMs = softDropInterval(board);
       softAcc += dt;
-      while (softAcc >= SOFT_MS) {
-        softAcc -= SOFT_MS;
+      while (softAcc >= softMs) {
+        softAcc -= softMs;
         act('soft');
       }
     }
@@ -5391,7 +5408,7 @@
     else if (action === 'right') pressHorz(1);
     else if (action === 'soft') {
       held.soft = true;
-      softAcc = SOFT_MS;
+      softAcc = softDropInterval(boards.find(x => x.live));
     } else act(action);
     e.preventDefault();
   }
@@ -5432,7 +5449,7 @@
       else if (action === 'right') pressHorz(1);
       else if (action === 'soft') {
         held.soft = true;
-        softAcc = SOFT_MS;
+        softAcc = softDropInterval(boards.find(x => x.live));
       } else act(action);
     };
     const onUp = () => {
