@@ -167,7 +167,7 @@
       namePh: 'Name',
       hostGame: 'Host game',
       joinGame: 'Join game',
-      menuHint: 'Up to 8 players in versus. Solo needs no connection.',
+      menuHint: 'Up to 8 players in versus.',
       modesTitle: 'Solo modes',
       versusTitle: 'Versus',
       playSolo: 'Play',
@@ -2709,10 +2709,13 @@
 
   function renderRoster() {
     rosterList.innerHTML = '';
+    const hostId = hostPlayerId || (mode === 'host' ? myId : null);
     roster.forEach(p => {
       const li = document.createElement('li');
       if (p.id === myId) li.classList.add('me');
-      if (p.ready) li.classList.add('ready');
+      const isHostSeat = !!(hostId && p.id === hostId);
+      // Host uses Start instead of Ready — treat them as ready in the roster.
+      if (p.ready || isHostSeat) li.classList.add('ready');
       if (p.connected === false) li.classList.add('offline');
       const left = document.createElement('span');
       left.style.display = 'flex';
@@ -2723,7 +2726,7 @@
       dot.title = p.connected === false ? 'offline' : 'online';
       const name = document.createElement('span');
       name.textContent = p.name + (p.id === myId ? t('youTag') : '');
-      if (p.id === hostPlayerId || (mode === 'host' && p.id === myId)) {
+      if (isHostSeat) {
         const hostTag = document.createElement('span');
         hostTag.className = 'tag-host';
         hostTag.textContent = 'HOST';
@@ -2733,26 +2736,33 @@
       const tag = document.createElement('span');
       tag.className = 'tag';
       if (p.connected === false) tag.textContent = t('offline');
+      else if (isHostSeat) tag.textContent = '';
       else tag.textContent = p.ready ? t('ready') : t('waiting');
       li.append(left, tag);
       rosterList.appendChild(li);
     });
-    const n = roster.length;
-    const readyN = roster.filter(p => p.ready && p.connected !== false).length;
+    const present = roster.filter(p => p.connected !== false);
+    const needReady = present.filter(p => p.id !== hostId);
+    const n = present.length;
+    const readyN = needReady.filter(p => p.ready).length;
+    const guestsReady = needReady.every(p => p.ready);
     let status;
     if (mode === 'host' && n === 1) {
       status = t('waitingPeers');
-    } else if (n > 0 && readyN >= n) {
+    } else if (needReady.length > 0 && guestsReady) {
       status = mode === 'host' ? t('lobbyWaitingStart') : t('lobbyHostStart');
     } else {
       status = t('rosterStatus', {n, max: MAX_PLAYERS, ready: readyN});
-      if (readyN < n) status += ' · ' + t('lobbyNeedReady');
+      if (needReady.length && readyN < needReady.length) status += ' · ' + t('lobbyNeedReady');
     }
     if ($('lobbyStatus')) $('lobbyStatus').textContent = status;
 
     const me = roster.find(p => p.id === myId);
-    btnReady.textContent = me?.ready ? t('unready') : t('ready');
-    btnReady.classList.toggle('ready-on', !!me?.ready);
+    if (btnReady) {
+      btnReady.hidden = mode === 'host' || matchPhase !== 'lobby';
+      btnReady.textContent = me?.ready ? t('unready') : t('ready');
+      btnReady.classList.toggle('ready-on', !!me?.ready);
+    }
     updateStartButton();
     updateConnQualityUI();
   }
@@ -3552,31 +3562,34 @@
     updateStartButton();
   }
 
+  function lobbyGuestsReady() {
+    const hostId = hostPlayerId || (mode === 'host' ? myId : null);
+    const guests = roster.filter(p => p.id !== hostId && p.connected !== false);
+    return guests.every(p => p.ready);
+  }
+
   function updateStartButton() {
     if (!btnStart) return;
     const isHost = mode === 'host';
-    // Always reserve space for Start while hosting so enabling it cannot
-    // steal the same click that toggled Ready.
+    // Host Start doubles as ready — no separate Ready button for the host.
     btnStart.hidden = !isHost || matchPhase !== 'lobby';
     if (!isHost || matchPhase !== 'lobby') {
       if (startArmTimer) { clearTimeout(startArmTimer); startArmTimer = 0; }
       btnStart.disabled = true;
       return;
     }
-    const n = roster.length;
-    const allReady = n > 0 && roster.every(p => p.ready && p.connected !== false);
-    if (!allReady) {
+    const canStart = roster.length > 0 && lobbyGuestsReady();
+    if (!canStart) {
       if (startArmTimer) { clearTimeout(startArmTimer); startArmTimer = 0; }
       btnStart.disabled = true;
       return;
     }
-    // Arm Start shortly after everyone is ready so a Ready click cannot hit Start.
+    // Brief arm so a guest's last Ready cannot be raced by an already-hovered Start.
     if (btnStart.disabled && !startArmTimer) {
       startArmTimer = setTimeout(() => {
         startArmTimer = 0;
         if (mode !== 'host' || matchPhase !== 'lobby') return;
-        const ok = roster.length > 0 && roster.every(p => p.ready && p.connected !== false);
-        btnStart.disabled = !ok;
+        btnStart.disabled = !(roster.length > 0 && lobbyGuestsReady());
       }, 400);
     }
   }
@@ -5076,15 +5089,22 @@
   }
 
   function toggleReady() {
+    if (mode === 'host') return; // Host readies by pressing Start.
     const me = roster.find(p => p.id === myId);
     if (!me || matchPhase !== 'lobby') return;
     me.ready = !me.ready;
-    if (mode === 'host') {
-      broadcastRoster();
-    } else {
-      netSend({t: 'ready', ready: me.ready, from: myId});
-      renderRoster();
-    }
+    netSend({t: 'ready', ready: me.ready, from: myId});
+    renderRoster();
+  }
+
+  function hostStartMatch() {
+    if (mode !== 'host' || matchPhase !== 'lobby') return;
+    if (!btnStart || btnStart.disabled) return;
+    if (!lobbyGuestsReady()) return;
+    const me = roster.find(p => p.id === myId);
+    if (me) me.ready = true;
+    broadcastRoster();
+    tryHostStart();
   }
 
   function showHostUI(code) {
@@ -5516,15 +5536,14 @@
   $('btnNetGo').onclick = menuClick(joinRoom);
   $('btnReady').onclick = menuClick(toggleReady);
   if (btnStart) {
-    btnStart.onclick = menuClick(() => {
-      if (btnStart.disabled || matchPhase !== 'lobby' || mode !== 'host') return;
-      tryHostStart();
-    });
+    btnStart.onclick = menuClick(hostStartMatch);
   }
   function hostSettingChanged() {
     if (mode !== 'host' || matchPhase !== 'lobby') return;
-    // Changing settings clears ready so nobody starts on stale rules.
-    roster.forEach(p => { p.ready = false; });
+    // Changing settings clears guest ready so nobody starts on stale rules.
+    roster.forEach(p => {
+      if (p.id !== myId) p.ready = false;
+    });
     broadcastLobbySettings();
     broadcastRoster();
   }

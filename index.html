@@ -61,65 +61,81 @@
     <button id="btnJoin" class="secondary" data-i18n="joinGame">Join game</button>
     <button id="btnSettings" class="secondary" type="button" data-i18n="settings">Settings</button>
     <p id="menuStatus" class="hint menu-status" hidden></p>
-    <p class="hint" data-i18n="menuHint">Up to 8 players in versus. Solo needs no connection.</p>
+    <p class="hint" data-i18n="menuHint">Up to 8 players in versus.</p>
   </div>
 
   <div id="settings" class="panel stone-tablet settings-panel overlay-panel" hidden>
     <span class="panel-corners" aria-hidden="true"></span>
-    <h2 class="settings-title" data-i18n="settingsTitle">Settings</h2>
+    <div class="settings-scroll">
+      <h2 class="settings-title" data-i18n="settingsTitle">Settings</h2>
 
-    <h3 class="settings-section" data-i18n="audioTitle">Audio</h3>
-    <label class="setting-slider">
-      <span data-i18n="volMaster">Master</span>
-      <input id="rngMaster" type="range" min="0" max="100" step="1" value="72">
-      <output id="outMaster" for="rngMaster">72</output>
-    </label>
-    <label class="setting-slider">
-      <span data-i18n="volMusic">Background music</span>
-      <input id="rngMusic" type="range" min="0" max="100" step="1" value="28">
-      <output id="outMusic" for="rngMusic">28</output>
-    </label>
-    <label class="setting-slider">
-      <span data-i18n="volSfx">SFX</span>
-      <input id="rngSfx" type="range" min="0" max="100" step="1" value="78">
-      <output id="outSfx" for="rngSfx">78</output>
-    </label>
-    <p class="hint" data-i18n="audioHint">Background music from audio/bgm.mp3 · SFX are synthesized in-browser.</p>
+      <details class="settings-fold">
+        <summary class="settings-fold-toggle">
+          <span data-i18n="audioTitle">Audio</span>
+        </summary>
+        <div class="settings-fold-body">
+          <label class="setting-slider">
+            <span data-i18n="volMaster">Master</span>
+            <input id="rngMaster" type="range" min="0" max="100" step="1" value="72">
+            <output id="outMaster" for="rngMaster">72</output>
+          </label>
+          <label class="setting-slider">
+            <span data-i18n="volMusic">Background music</span>
+            <input id="rngMusic" type="range" min="0" max="100" step="1" value="28">
+            <output id="outMusic" for="rngMusic">28</output>
+          </label>
+          <label class="setting-slider">
+            <span data-i18n="volSfx">SFX</span>
+            <input id="rngSfx" type="range" min="0" max="100" step="1" value="78">
+            <output id="outSfx" for="rngSfx">78</output>
+          </label>
+          <p class="hint" data-i18n="audioHint">Background music from audio/bgm.mp3 · SFX are synthesized in-browser.</p>
+        </div>
+      </details>
 
-    <h3 class="settings-section" data-i18n="controlsTitle">Controls</h3>
-    <label class="setting-slider">
-      <span data-i18n="dasLabel">DAS (ms)</span>
-      <input id="rngDas" type="range" min="50" max="400" step="10" value="160">
-      <output id="outDas" for="rngDas">160</output>
-    </label>
-    <label class="setting-slider">
-      <span data-i18n="arrLabel">ARR (ms)</span>
-      <input id="rngArr" type="range" min="0" max="200" step="5" value="50">
-      <output id="outArr" for="rngArr">50</output>
-    </label>
-    <label class="setting-slider">
-      <span data-i18n="softLabel">Soft drop (ms)</span>
-      <input id="rngSoft" type="range" min="10" max="200" step="5" value="40">
-      <output id="outSoft" for="rngSoft">40</output>
-    </label>
-    <label class="setting-check">
-      <input id="chkShake" type="checkbox" checked>
-      <span data-i18n="shakeLabel">Screen shake</span>
-    </label>
-    <label class="setting-check">
-      <input id="chkColorblind" type="checkbox">
-      <span data-i18n="colorblindLabel">Colorblind piece patterns</span>
-    </label>
-    <label class="setting-slider">
-      <span data-i18n="gridOpacityLabel">Board grid</span>
-      <input id="rngGrid" type="range" min="0" max="40" step="1" value="16">
-      <output id="outGrid" for="rngGrid">16</output>
-    </label>
-    <h3 class="settings-section" data-i18n="bindsTitle">Key bindings</h3>
-    <div id="bindList" class="bind-list"></div>
-    <button id="btnResetBinds" class="secondary" type="button" data-i18n="resetBinds">Reset keys</button>
-    <p class="hint" data-i18n="settingsHint">Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.</p>
-    <button id="btnSettingsBack" class="secondary" type="button" data-i18n="back">Back</button>
+      <h3 class="settings-section" data-i18n="controlsTitle">Controls</h3>
+      <label class="setting-slider">
+        <span data-i18n="dasLabel">DAS (ms)</span>
+        <input id="rngDas" type="range" min="50" max="400" step="10" value="160">
+        <output id="outDas" for="rngDas">160</output>
+      </label>
+      <label class="setting-slider">
+        <span data-i18n="arrLabel">ARR (ms)</span>
+        <input id="rngArr" type="range" min="0" max="200" step="5" value="50">
+        <output id="outArr" for="rngArr">50</output>
+      </label>
+      <label class="setting-slider">
+        <span data-i18n="softLabel">Soft drop (ms)</span>
+        <input id="rngSoft" type="range" min="10" max="200" step="5" value="40">
+        <output id="outSoft" for="rngSoft">40</output>
+      </label>
+      <label class="setting-check">
+        <input id="chkShake" type="checkbox" checked>
+        <span data-i18n="shakeLabel">Screen shake</span>
+      </label>
+      <label class="setting-check">
+        <input id="chkColorblind" type="checkbox">
+        <span data-i18n="colorblindLabel">Colorblind piece patterns</span>
+      </label>
+      <label class="setting-slider">
+        <span data-i18n="gridOpacityLabel">Board grid</span>
+        <input id="rngGrid" type="range" min="0" max="40" step="1" value="16">
+        <output id="outGrid" for="rngGrid">16</output>
+      </label>
+
+      <details class="settings-fold">
+        <summary class="settings-fold-toggle">
+          <span data-i18n="bindsTitle">Key bindings</span>
+        </summary>
+        <div class="settings-fold-body">
+          <div id="bindList" class="bind-list"></div>
+          <button id="btnResetBinds" class="secondary" type="button" data-i18n="resetBinds">Reset keys</button>
+        </div>
+      </details>
+
+      <p class="hint" data-i18n="settingsHint">Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.</p>
+    </div>
+    <button id="btnSettingsBack" class="secondary settings-back" type="button" data-i18n="back">Back</button>
   </div>
 
   <div id="pause" class="panel stone-tablet overlay-panel" hidden>

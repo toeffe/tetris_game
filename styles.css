@@ -264,10 +264,50 @@ body.in-game #atmosphere .vignette{
   text-transform:uppercase;
 }
 .settings-panel{
-  max-height:min(82vh, 720px);
-  overflow-y:auto;
-  overscroll-behavior:contain;
+  /* No inner scroll — keybinds stay collapsed so the tablet fits the viewport. */
+  overflow:visible;
 }
+.settings-panel > .settings-back{
+  margin-top:12px;
+}
+.settings-fold{
+  margin:12px 0 8px;
+  border:1px solid rgba(212,175,55,.28);
+  background:rgba(0,0,0,.22);
+  border-radius:2px;
+  position:relative;
+}
+.settings-fold-toggle{
+  list-style:none;
+  cursor:pointer;
+  display:block;
+  padding:10px 28px 10px 12px;
+  font-family:var(--font-display);
+  font-size:.78rem;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--gold);
+  user-select:none;
+}
+.settings-fold-toggle::-webkit-details-marker{display:none;}
+.settings-fold-toggle::after{
+  content:'▾';
+  position:absolute;
+  right:12px;
+  top:10px;
+  font-size:.7rem;
+  opacity:.7;
+  transition:transform .2s ease;
+}
+.settings-fold[open] .settings-fold-toggle::after{transform:rotate(-180deg);}
+.settings-fold-body{
+  padding:0 10px 10px;
+  border-top:1px solid rgba(212,175,55,.16);
+}
+.settings-fold-body .bind-list{margin-top:8px;}
+.settings-fold-body #btnResetBinds{margin-top:8px;}
+.settings-fold-body .hint{margin-top:8px;}
+.settings-fold-body .setting-slider{margin:8px 0;}
 .settings-section{
   margin:16px 0 8px;
   font-family:var(--font-body);
