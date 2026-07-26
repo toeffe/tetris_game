@@ -263,11 +263,24 @@ body.in-game #atmosphere .vignette{
   letter-spacing:.08em;
   text-transform:uppercase;
 }
-.settings-panel{
-  /* No inner scroll — keybinds stay collapsed so the tablet fits the viewport. */
-  overflow:visible;
+#settings.settings-panel{
+  max-height:min(92dvh, 92vh);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  box-sizing:border-box;
 }
-.settings-panel > .settings-back{
+#settings .settings-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(212,175,55,.35) transparent;
+}
+#settings.settings-panel > .settings-back{
+  flex:0 0 auto;
   margin-top:12px;
 }
 .settings-fold{
@@ -307,7 +320,8 @@ body.in-game #atmosphere .vignette{
 .settings-fold-body .bind-list{margin-top:8px;}
 .settings-fold-body #btnResetBinds{margin-top:8px;}
 .settings-fold-body .hint{margin-top:8px;}
-.settings-fold-body .setting-slider{margin:8px 0;}
+.settings-fold-body .setting-slider,
+.settings-fold-body .setting-check{margin:8px 0;}
 .settings-section{
   margin:16px 0 8px;
   font-family:var(--font-body);
@@ -1836,6 +1850,11 @@ canvas{
   color:var(--parchment);
 }
 .setting-slider span{grid-column:1 / -1; letter-spacing:.06em;}
+.setting-slider span.has-tip{
+  width:fit-content;
+  cursor:help;
+  border-bottom:1px dotted rgba(212,175,55,.45);
+}
 .setting-slider input[type="range"]{
   width:100%;
   accent-color:var(--gold);

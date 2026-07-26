@@ -288,6 +288,8 @@
       dasLabel: 'DAS (ms)',
       arrLabel: 'ARR (ms)',
       softLabel: 'Soft drop (ms)',
+      dasHint: 'Delayed Auto Shift — how long you hold Left/Right before the piece starts repeating sideways.',
+      arrHint: 'Auto Repeat Rate — how fast the piece keeps moving sideways after DAS kicks in. 0 = instant.',
       settingsHint: 'Lower DAS/ARR = snappier movement. Soft drop is auto-repeat while held.',
       settingsSaved: 'Saved',
       shakeLabel: 'Screen shake',
@@ -479,6 +481,8 @@
       dasLabel: 'DAS (ms)',
       arrLabel: 'ARR (ms)',
       softLabel: 'Blødt fald (ms)',
+      dasHint: 'Delayed Auto Shift — hvor længe du holder Venstre/Højre, før brikken gentager sidelæns.',
+      arrHint: 'Auto Repeat Rate — hvor hurtigt brikken bliver ved med at flytte sidelæns efter DAS. 0 = øjeblikkelig.',
       settingsHint: 'Lavere DAS/ARR = hurtigere bevægelse. Blødt fald gentages mens tasten holdes.',
       settingsSaved: 'Gemt',
       shakeLabel: 'Skærmryst',
@@ -865,6 +869,10 @@
     document.querySelectorAll('[data-i18n-aria]').forEach(el => {
       const key = el.getAttribute('data-i18n-aria');
       if (key) el.setAttribute('aria-label', t(key));
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+      const key = el.getAttribute('data-i18n-title');
+      if (key) el.setAttribute('title', t(key));
     });
     const da = $('btnLangDa'), en = $('btnLangEn');
     if (da) da.classList.toggle('active', lang === 'da');
